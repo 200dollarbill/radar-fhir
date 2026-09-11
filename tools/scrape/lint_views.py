@@ -15,6 +15,11 @@ def _sources_of(text: str) -> list[str] | None:
     return [m.group(1) for m in (_SOURCE_LINE.match(l) for l in tail.splitlines()) if m]
 
 
+def _mentioned(name: str, text: str) -> bool:
+    """Check if name is mentioned in text with word boundaries (not just substring)."""
+    return re.search(r"(?<![\w.-])" + re.escape(name) + r"(?![\w.-])", text) is not None
+
+
 def lint(reference_root: Path) -> list[str]:
     root = Path(reference_root)
     problems: list[str] = []
@@ -28,7 +33,7 @@ def lint(reference_root: Path) -> list[str]:
             problems.append(f"claude/{f.name}: {n} lines exceeds {MAX_LINES}")
         if f.name == "INDEX.md":
             continue
-        if f.name not in index_text:
+        if not _mentioned(f.name, index_text):
             problems.append(f"claude/INDEX.md does not mention {f.name}")
         if f.name in _CLAUDE_EXEMPT:
             continue
@@ -42,7 +47,7 @@ def lint(reference_root: Path) -> list[str]:
 
     readme = (human / "README.md").read_text(encoding="utf-8") if (human / "README.md").exists() else ""
     for f in sorted(human.glob("*.md")):
-        if f.name != "README.md" and f.name not in readme:
+        if f.name != "README.md" and not _mentioned(f.name, readme):
             problems.append(f"human/README.md does not mention {f.name}")
     return problems
 

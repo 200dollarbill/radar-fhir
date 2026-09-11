@@ -48,3 +48,23 @@ def test_human_not_in_readme(tmp_path):
     _make(tmp_path)
     (tmp_path / "human" / "README.md").write_text("nothing\n")
     assert any("README.md" in p for p in lint_views.lint(tmp_path))
+
+
+def test_index_substring_of_other_name_does_not_count(tmp_path):
+    _make(tmp_path)
+    # Create INDEX.md that contains only "inpatient.md" but not "patient.md"
+    (tmp_path / "claude" / "INDEX.md").write_text("- inpatient.md — InPatient\n")
+    # Create a "patient.md" file
+    (tmp_path / "claude" / "patient.md").write_text("# Patient\n\n## Sources\n- raw/fhir-r4/patient.md\n")
+    # Should report problem because "patient.md" is not mentioned (only "inpatient.md" is)
+    problems = lint_views.lint(tmp_path)
+    assert any("INDEX.md does not mention patient.md" in p for p in problems)
+
+
+def test_index_mention_inside_markdown_link_counts(tmp_path):
+    _make(tmp_path)
+    # Create INDEX.md with the filename inside a markdown link
+    (tmp_path / "claude" / "INDEX.md").write_text("[Patient](fhir-patient.md)\n")
+    # Should not report a problem because fhir-patient.md is mentioned in the link
+    problems = lint_views.lint(tmp_path)
+    assert not any("INDEX.md does not mention fhir-patient.md" in p for p in problems)
