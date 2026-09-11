@@ -29,6 +29,7 @@ Page notes: usable as a shared registry or merely as support for references (doc
 ### Organization — search parameters
 | Name | Type | Expression |
 |---|---|---|
+| active | token | `Organization.active` |
 | address | string | `Organization.address` (any Address string field) |
 | address-city / address-country / address-postalcode / address-state | string | `Organization.address.city` / `.country` / `.postalCode` / `.state` |
 | address-use | token | `Organization.address.use` |
@@ -85,6 +86,7 @@ Bindings: `status` Required LocationStatus; `operationalStatus` Preferred v2.011
 ### Location — search parameters
 | Name | Type | Expression |
 |---|---|---|
+| address | string | `Location.address` — "A (part of the) address of the location" |
 | address-city / address-country / address-postalcode / address-state | string | `Location.address.city` / `.country` / `.postalCode` / `.state` |
 | address-use | token | `Location.address.use` |
 | endpoint | reference | `Location.endpoint` (Endpoint) |

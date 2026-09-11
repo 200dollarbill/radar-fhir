@@ -46,6 +46,7 @@ Root `Condition` (ITU) is a DomainResource carrying con-3 (guideline), con-4 and
 ## Search parameters
 | Name | Type | Expression |
 |---|---|---|
+| abatement-age | quantity | `Condition.abatement.as(Age) \| Condition.abatement.as(Range)` |
 | abatement-date | date | `Condition.abatement.as(dateTime) \| Condition.abatement.as(Period)` |
 | abatement-string | string | `Condition.abatement.as(string)` |
 | asserter | reference | `Condition.asserter` (Practitioner, Patient, PractitionerRole, RelatedPerson) |

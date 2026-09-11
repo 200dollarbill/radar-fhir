@@ -60,6 +60,7 @@ Root `Procedure` (TU) is a DomainResource. No constraints table is printed on th
 ## Search parameters
 | Name | Type | Expression |
 |---|---|---|
+| based-on | reference | `Procedure.basedOn` (CarePlan, ServiceRequest) |
 | category | token | `Procedure.category` |
 | code | token | `Procedure.code` (13 Resources) |
 | date | date | `Procedure.performed` (17 Resources) |

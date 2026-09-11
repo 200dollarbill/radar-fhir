@@ -63,6 +63,7 @@ All are marked `TU` on the page. "In common" = number of resources sharing the p
 
 | Name | Type | Expression |
 |---|---|---|
+| based-on | reference | `Observation.basedOn` (CarePlan, MedicationRequest, NutritionOrder, DeviceRequest, ServiceRequest, ImmunizationRecommendation) |
 | category | token | `Observation.category` |
 | code | token | `Observation.code` (13 Resources) |
 | code-value-concept | composite | On Observation: `code`: code; `value-concept`: `value.as(CodeableConcept)` |

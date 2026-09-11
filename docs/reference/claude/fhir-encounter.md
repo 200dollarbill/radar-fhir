@@ -77,6 +77,7 @@ Root `Encounter` (TU) is a DomainResource. No constraints table is printed on th
 ## Search parameters
 | Name | Type | Expression |
 |---|---|---|
+| account | reference | `Encounter.account` (Account) |
 | appointment | reference | `Encounter.appointment` (Appointment) |
 | based-on | reference | `Encounter.basedOn` (ServiceRequest) |
 | class | token | `Encounter.class` |

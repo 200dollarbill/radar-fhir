@@ -66,6 +66,7 @@ Notes on the page: `identifier` is *only* for an actual identifier of a specific
 ### Device — search parameters
 | Name | Type | Expression |
 |---|---|---|
+| device-name | string | `Device.deviceName.name \| Device.type.coding.display \| Device.type.text` — "may match any of the string fields in Device.deviceName or Device.type" |
 | identifier | token | `Device.identifier` |
 | location | reference | `Device.location` (Location) |
 | manufacturer | string | `Device.manufacturer` |
@@ -102,6 +103,7 @@ Page note: correct codes for metric types are registered in the RTM Management s
 ### DeviceMetric — search parameters
 | Name | Type | Expression |
 |---|---|---|
+| category | token | `DeviceMetric.category` |
 | identifier | token | `DeviceMetric.identifier` |
 | parent | reference | `DeviceMetric.parent` (Device) |
 | source | reference | `DeviceMetric.source` (Device) |
@@ -155,6 +157,7 @@ Bindings: `deviceName.type` Required DeviceNameType; `type` Example FHIRDeviceTy
 ### DeviceDefinition — search parameters
 | Name | Type | Expression |
 |---|---|---|
+| identifier | token | `DeviceDefinition.identifier` |
 | parent | reference | `DeviceDefinition.parentDevice` (DeviceDefinition) |
 | type | token | `DeviceDefinition.type` |
 

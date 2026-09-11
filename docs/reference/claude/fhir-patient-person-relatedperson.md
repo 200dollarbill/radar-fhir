@@ -40,6 +40,7 @@ Bindings: `gender`/`contact.gender` Required AdministrativeGender; `maritalStatu
 ### Patient — search parameters (all `TU`)
 | Name | Type | Expression |
 |---|---|---|
+| active | token | `Patient.active` |
 | address | string | `Patient.address` — may match any string field of the Address (3 Resources) |
 | address-city | string | `Patient.address.city` |
 | address-country | string | `Patient.address.country` |
@@ -107,6 +108,7 @@ Root `Person` (TU) is a DomainResource. No constraints table printed.
 ### Person — search parameters
 | Name | Type | Expression |
 |---|---|---|
+| address | string | `Person.address` (any Address string field) (3 Resources) |
 | address-city / address-country / address-postalcode / address-state | string | `Person.address.city` / `.country` / `.postalCode` / `.state` |
 | address-use | token | `Person.address.use` |
 | birthdate | date | `Person.birthDate` |
@@ -156,6 +158,7 @@ Bindings: `relationship` Preferred PatientRelationshipType; `gender` Required Ad
 ### RelatedPerson — search parameters
 | Name | Type | Expression |
 |---|---|---|
+| active | token | `RelatedPerson.active` |
 | address | string | `RelatedPerson.address` |
 | address-city / address-country / address-postalcode / address-state | string | `RelatedPerson.address.city` / `.country` / `.postalCode` / `.state` |
 | address-use | token | `RelatedPerson.address.use` |

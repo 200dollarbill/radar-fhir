@@ -29,6 +29,7 @@ Page notes: Practitioner "SHALL NOT be used for persons involved without a forma
 ### Practitioner — search parameters
 | Name | Type | Expression |
 |---|---|---|
+| active | token | `Practitioner.active` |
 | address | string | `Practitioner.address` (any Address string field) (3 Resources) |
 | address-city / address-country / address-postalcode / address-state | string | `Practitioner.address.city` / `.country` / `.postalCode` / `.state` |
 | address-use | token | `Practitioner.address.use` |
@@ -76,6 +77,7 @@ Page notes: no `address` on PractitionerRole — the referenced Location carries
 ### PractitionerRole — search parameters
 | Name | Type | Expression |
 |---|---|---|
+| active | token | `PractitionerRole.active` |
 | date | date | `PractitionerRole.period` |
 | email | token | `PractitionerRole.telecom.where(system='email')` |
 | endpoint | reference | `PractitionerRole.endpoint` (Endpoint) |
