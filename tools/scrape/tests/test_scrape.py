@@ -66,6 +66,24 @@ def test_run_writes_files_and_collects_failures(tmp_path):
     assert failures == [("missing", "SATUSEHAT redirect notice (page does not exist)")]
 
 
+def test_run_survives_unexpected_exception(tmp_path):
+    good = (FIX / "satusehat_page.html").read_text(encoding="utf-8")
+    sources = [
+        {"id": "bad", "group": "satusehat", "url": "https://s/bad/", "title": "Bad"},
+        {"id": "ok", "group": "satusehat", "url": "https://s/ok/", "title": "OK"},
+    ]
+
+    def fetch_fn(url):
+        if url == "https://s/bad/":
+            raise RuntimeError("boom")
+        return good
+
+    failures = scrape.run(sources, tmp_path, fetch_fn=fetch_fn, sleep_fn=lambda s: None)
+    assert (tmp_path / "satusehat" / "ok.md").exists()
+    assert not (tmp_path / "satusehat" / "bad.md").exists()
+    assert failures == [("bad", "boom")]
+
+
 @pytest.mark.network
 def test_fetch_real_page_smoke():
     html = scrape.fetch("https://hl7.org/fhir/R4/patient.html")

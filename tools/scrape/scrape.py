@@ -81,7 +81,7 @@ def run(sources: list[dict], root: Path, fetch_fn=fetch, sleep_fn=time.sleep) ->
         try:
             html = fetch_fn(src["url"])
             text = build_document(src, html, fetched_at)
-        except (extractors.PageMissing, requests.RequestException) as e:
+        except Exception as e:  # any per-source failure must not abort the batch
             failures.append((src["id"], str(e)))
             print(f"FAIL  {src['id']}: {e}")
             continue
