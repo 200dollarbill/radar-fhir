@@ -849,7 +849,7 @@ Expected: ~100 lines of `ok`, exit code 1 with at least `res-device` listed as f
 
 ```bash
 head -12 docs/reference/raw/satusehat/res-observation.md
-head -12 docs/reference/raw/fhir-r4/observation.html.md 2>/dev/null || head -12 docs/reference/raw/fhir-r4/observation.md
+head -12 docs/reference/raw/fhir-r4/observation.md
 wc -l docs/reference/raw/*/*.md | tail -1
 grep -L '^sha256:' docs/reference/raw/*/*.md   # expect no output
 ```
@@ -1342,7 +1342,7 @@ code{font-size:.92em}
 
 def _order(human_dir: Path) -> list[Path]:
     files = sorted(p for p in human_dir.glob("*.md") if p.name != "README.md")
-    return [human_dir / "README.md"] + files + []
+    return [human_dir / "README.md"] + files
 
 
 def build(human_dir: Path) -> str:
