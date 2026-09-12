@@ -9,20 +9,30 @@ import markdown
 _MERMAID = re.compile(r"```mermaid\n(.*?)```", re.S)
 _PLACEHOLDER = "MERMAIDPLACEHOLDER{}"
 _STYLE = """
-:root{--bg:#fafaf8;--fg:#1a1a1a;--muted:#666;--line:#ddd;--accent:#0b5}
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#141414;--fg:#eee;--muted:#aaa;--line:#333}}
-:root[data-theme="dark"]{--bg:#141414;--fg:#eee;--muted:#aaa;--line:#333}
-body{background:var(--bg);color:var(--fg);font:16px/1.55 system-ui,sans-serif;margin:0;padding-block:24px;padding-inline:16px}
-.wrap{display:flex;gap:32px;max-width:1100px;margin:auto}
-nav{flex:0 0 220px;position:sticky;top:16px;align-self:flex-start;font-size:14px}
-nav a{display:block;color:var(--fg);text-decoration:none;padding:4px 0}
-main{flex:1;min-width:0}
-section{border-top:1px solid var(--line);padding-top:24px;margin-top:24px}
-table{border-collapse:collapse;display:block;overflow-x:auto;max-width:100%}
-td,th{border:1px solid var(--line);padding:4px 8px;text-align:left;vertical-align:top}
-pre{overflow-x:auto;background:rgba(127,127,127,.12);padding:12px}
-code{font-size:.92em}
-@media (max-width:760px){.wrap{flex-direction:column}nav{position:static;flex:none}}
+:root{--bg:#f5f7f8;--fg:#16211f;--muted:#5c6b68;--line:#d5dcda;--accent:#0f7a6e;--code-bg:#e9eeed}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#121817;--fg:#e6ecea;--muted:#97a5a1;--line:#2a3533;--accent:#4fc3b0;--code-bg:#1b2422}}
+:root[data-theme="dark"]{--bg:#121817;--fg:#e6ecea;--muted:#97a5a1;--line:#2a3533;--accent:#4fc3b0;--code-bg:#1b2422}
+body{background:var(--bg);color:var(--fg);font:16px/1.6 "IBM Plex Sans",system-ui,sans-serif;margin:0;padding-block:32px;padding-inline:16px}
+h1,h2,h3,h4{font-family:"IBM Plex Serif",Georgia,serif;font-weight:600;line-height:1.2;text-wrap:balance;margin:1.6em 0 .5em}
+h1{font-size:1.9rem;margin-top:0}h2{font-size:1.4rem}h3{font-size:1.15rem}
+.wrap{display:flex;gap:40px;max-width:1120px;margin:auto}
+nav{flex:0 0 230px;position:sticky;top:16px;align-self:flex-start;font-size:.85rem;border-left:2px solid var(--line);padding-left:12px}
+nav a{display:block;color:var(--muted);text-decoration:none;padding:4px 0}
+nav a:hover,nav a:focus-visible{color:var(--accent);outline:none}
+nav a:focus-visible{text-decoration:underline}
+main{flex:1;min-width:0;max-width:72ch}
+main a{color:var(--accent)}
+section{border-top:1px solid var(--line);padding-top:28px;margin-top:28px}
+section:first-child{border-top:0;padding-top:0;margin-top:0}
+table{border-collapse:collapse;display:block;overflow-x:auto;max-width:100%;font-size:.9rem;font-variant-numeric:tabular-nums}
+td,th{border:1px solid var(--line);padding:5px 9px;text-align:left;vertical-align:top}
+th{font-weight:600;color:var(--muted);font-size:.78rem;letter-spacing:.04em;text-transform:uppercase}
+pre{overflow-x:auto;background:var(--code-bg);padding:12px 14px;border-radius:3px}
+pre.mermaid{background:transparent;padding:0}
+code{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.88em}
+blockquote{border-left:3px solid var(--accent);margin:1em 0;padding:.2em 1em;color:var(--muted)}
+@media (max-width:760px){.wrap{flex-direction:column;gap:24px}nav{position:static;flex:none}}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
 """
 
 
@@ -68,7 +78,9 @@ def build(human_dir: Path) -> str:
         sid = f.stem
         nav.append(f'<a href="#{sid}">{title}</a>')
         parts.append(f'<section id="{sid}">{page_html}</section>')
-    return (f"<title>SATUSEHAT FHIR Reference</title><style>{_STYLE}</style>"
+    return (f"<title>SATUSEHAT FHIR Reference</title>"
+            f'<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Serif:wght@600&family=IBM+Plex+Mono&display=swap">'
+            f"<style>{_STYLE}</style>"
             f'<div class="wrap"><nav>{"".join(nav)}</nav><main>{"".join(parts)}</main></div>')
 
 

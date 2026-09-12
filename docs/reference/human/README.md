@@ -52,3 +52,5 @@ python3 tools/scrape/lint_views.py
 ```
 
 Read next: `01-satusehat-overview.md`
+
+Browsable version: https://claude.ai/code/artifact/cc73fa7d-27a7-4454-bf84-8b20f8a0f843
