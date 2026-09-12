@@ -34,7 +34,7 @@ def load_sources(path: Path) -> list[dict]:
             raise ValueError(f"duplicate source id: {s['id']}")
         seen.add(s["id"])
         base = data[_BASE_KEY[s["group"]]]
-        out.append({**s, "url": base + s["url"]})
+        out.append({**s, "url": base + s["url"], "expected_missing": s.get("expected_missing", False)})
     return out
 
 
@@ -82,8 +82,11 @@ def run(sources: list[dict], root: Path, fetch_fn=fetch, sleep_fn=time.sleep) ->
             html = fetch_fn(src["url"])
             text = build_document(src, html, fetched_at)
         except Exception as e:  # any per-source failure must not abort the batch
-            failures.append((src["id"], str(e)))
-            print(f"FAIL  {src['id']}: {e}")
+            if src.get("expected_missing") and isinstance(e, extractors.PageMissing):
+                print(f"skip  {src['id']}: expected missing")
+                continue
+            failures.append((src["id"], f"{type(e).__name__}: {e}"))
+            print(f"FAIL  {src['id']}: {type(e).__name__}: {e}")
             continue
         path = output_path(root, src)
         path.parent.mkdir(parents=True, exist_ok=True)

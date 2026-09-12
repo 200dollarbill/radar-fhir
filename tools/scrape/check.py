@@ -14,13 +14,15 @@ from tools.scrape import convert, extractors, scrape  # noqa: E402
 def classify(source: dict, root: Path, fetch_fn=scrape.fetch) -> tuple[str, str]:
     local = scrape.output_path(root, source)
     if not local.exists():
+        if source.get("expected_missing"):
+            return "expected-missing", ""
         return "missing-local", str(local)
     meta, _ = convert.parse_document(local.read_text(encoding="utf-8"))
     try:
         html = fetch_fn(source["url"])
         body = convert.html_to_markdown(extractors.extract(source["group"], html))
     except Exception as e:
-        return "failed", str(e)
+        return "failed", f"{type(e).__name__}: {e}"
     new_hash = convert.text_hash(body)
     if new_hash == meta["sha256"]:
         return "unchanged", ""
@@ -37,7 +39,7 @@ def main() -> int:
         counts[status] = counts.get(status, 0) + 1
         print(f"{status:<14}{src['id']}  {detail}")
     print("\n" + ", ".join(f"{k}: {v}" for k, v in sorted(counts.items())))
-    return 0 if set(counts) <= {"unchanged"} else 1
+    return 0 if set(counts) <= {"unchanged", "expected-missing"} else 1
 
 
 if __name__ == "__main__":

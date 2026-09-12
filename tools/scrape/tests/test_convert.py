@@ -10,6 +10,12 @@ def test_html_to_markdown_uses_atx_headings_and_tables():
     assert "\n\n\n" not in md
 
 
+def test_html_to_markdown_normalises_cloudflare_email_links():
+    md = convert.html_to_markdown('<a href="/cdn-cgi/l/email-protection#ab12cd">x</a>')
+    assert "email-protection" in md
+    assert "#ab12cd" not in md
+
+
 def test_text_hash_is_stable_sha256():
     assert convert.text_hash("abc") == (
         "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"

@@ -4,8 +4,8 @@ title: LOINC Laboratory
 source_url: https://satusehat.kemkes.go.id/platform/docs/id/terminology/loinc/laboratory/
 group: satusehat
 fhir_version: R4
-fetched_at: '2026-09-11T13:33:32Z'
-sha256: cd6b4f50706e3bc3c4511958d6689e4d829f718fed4490553707641c7a38e367
+fetched_at: '2026-09-12T09:37:20Z'
+sha256: 4746a67bdb50169b7198d002a953b193e5b683772c164baf70beaf5daadc2285
 ---
 # Laboratorium
 
@@ -364,7 +364,7 @@ Standar LOINC menyediakan kodefikasi standar untuk beberapa hasil pemeriksaan de
 
 ## Prosedur untuk Kode LOINC yang tidak ditemukan
 
-Apabila terdapat kode yang belum tersedia pada master data LOINC yang digunakan pada SATUSEHAT silakan melakukan permintaan kepada Kementerian Kesehatan melalui formulir permintaan yang dapat di *download* di [**Lampiran LOINC Laboratorium**](https://s.kemkes.go.id/LampiranLOINC-Lab) dengan menekan tombol *“Request”*. Kirimkan formulir tersebut kepada tim kementerian kesehatan melalui *email* [[email protected]](/cdn-cgi/l/email-protection#acc5c4dfecc8d8c382c7c9c1c7c9df82cbc382c5c8) dengan subjek “Permintaan Terminologi Laboratorium”. Pada formulir permintaan terdapat dua bagian utama yaitu data kontak *requester* dan terminologi berikut merupakan cara pengisian formulir permintaan kode LOINC:
+Apabila terdapat kode yang belum tersedia pada master data LOINC yang digunakan pada SATUSEHAT silakan melakukan permintaan kepada Kementerian Kesehatan melalui formulir permintaan yang dapat di *download* di [**Lampiran LOINC Laboratorium**](https://s.kemkes.go.id/LampiranLOINC-Lab) dengan menekan tombol *“Request”*. Kirimkan formulir tersebut kepada tim kementerian kesehatan melalui *email* [[email protected]](/cdn-cgi/l/email-protection) dengan subjek “Permintaan Terminologi Laboratorium”. Pada formulir permintaan terdapat dua bagian utama yaitu data kontak *requester* dan terminologi berikut merupakan cara pengisian formulir permintaan kode LOINC:
 
 ![Tabel Terminologi Laboratorium](../../_images/loinc-laboratory-06.png)
 
@@ -443,7 +443,7 @@ Gambar 6. Tampilan Bagian Data Terminologi pada Formulir Permintaan Kode LOINC
 ### Tata Cara Pemetaan LOINC
 
 1. **Bagaimana jika kode LOINC tidak ditemukan?**  
-   Jika kode LOINC tidak ditemukan silakan tanyakan kendala anda ke tim DTO melalui *email* [[email protected]](/cdn-cgi/l/email-protection#f49d9c87b490809bda9f91999f9187da939bda9d90) atau silakan buat copy dan isi formulir permintaan terminologi laboratorium dari template: [link](https://docs.google.com/spreadsheets/d/1vezxU-866WM8X_Rd9sQdjFKqstQP9pvvdxSdFaS_wNU/edit#gid=4721809) berikut kemudian kirimkan melalui *email* ke [[email protected]](/cdn-cgi/l/email-protection#432a2b300327372c6d28262e2826306d242c6d2a27) dengan subjek “Permintaan Terminologi Laboratorium
+   Jika kode LOINC tidak ditemukan silakan tanyakan kendala anda ke tim DTO melalui *email* [[email protected]](/cdn-cgi/l/email-protection) atau silakan buat copy dan isi formulir permintaan terminologi laboratorium dari template: [link](https://docs.google.com/spreadsheets/d/1vezxU-866WM8X_Rd9sQdjFKqstQP9pvvdxSdFaS_wNU/edit#gid=4721809) berikut kemudian kirimkan melalui *email* ke [[email protected]](/cdn-cgi/l/email-protection) dengan subjek “Permintaan Terminologi Laboratorium
 2. **Kapan kita menggunakan kode LOINC yang tidak terdapat metode pemeriksaannya?**  
    Anda dapat menggunakan kode LOINC tanpa metode pemeriksaan jika anda tidak memiliki cukup informasi terkait metode yang digunakan dalam pemeriksaan laboratorium tersebut atau LOINC hanya menyediakan kode yang tidak menspesifikkan metode pemeriksaannya.
 3. **Bagaimana jika saya memiliki pemeriksaan yang hanya berlaku sebagai permintaan, hanya hasil, atau dapat digunakan sebagai pemeriksaan dan hasil?**  

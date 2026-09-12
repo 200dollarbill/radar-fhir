@@ -38,3 +38,9 @@ def test_failed_when_page_missing(tmp_path):
 def test_missing_local(tmp_path):
     html = (FIX / "satusehat_page.html").read_text(encoding="utf-8")
     assert check.classify(SRC, tmp_path, lambda u: html)[0] == "missing-local"
+
+
+def test_expected_missing(tmp_path):
+    html = (FIX / "satusehat_page.html").read_text(encoding="utf-8")
+    src = {**SRC, "expected_missing": True}
+    assert check.classify(src, tmp_path, lambda u: html) == ("expected-missing", "")

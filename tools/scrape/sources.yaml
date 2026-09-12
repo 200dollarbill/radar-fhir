@@ -29,7 +29,8 @@ sources:
   - {id: res-condition,         group: satusehat, url: fhir/resources/condition/,      title: Condition}
   - {id: res-procedure,         group: satusehat, url: fhir/resources/procedure/,      title: Procedure}
   - {id: res-related-person,    group: satusehat, url: fhir/resources/related-person/, title: RelatedPerson}
-  - {id: res-device,            group: satusehat, url: fhir/resources/device/,         title: Device (expected missing)}
+  - {id: res-device,            group: satusehat, url: fhir/resources/device/,         title: Device, expected_missing: true}
+  - {id: res-practitioner-role, group: satusehat, url: fhir/resources/practitioner-role/, title: PractitionerRole, expected_missing: true}
   # --- SATUSEHAT: REST API catalogue ---
   - {id: api-onboardings,          group: satusehat, url: api-catalogue/onboardings/,                         title: API Onboardings}
   - {id: api-patient,              group: satusehat, url: api-catalogue/onboardings/apis/patient/,            title: API Patient}

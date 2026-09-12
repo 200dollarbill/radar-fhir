@@ -6,10 +6,12 @@ import yaml
 from markdownify import markdownify
 
 _BLANKS = re.compile(r"\n{3,}")
+_CF_EMAIL_PROTECTION = re.compile(r"email-protection#[0-9a-fA-F]+")
 
 
 def html_to_markdown(html: str) -> str:
     md = markdownify(html, heading_style="ATX", bullets="-")
+    md = _CF_EMAIL_PROTECTION.sub("email-protection", md)
     md = _BLANKS.sub("\n\n", md).strip() + "\n"
     return md
 

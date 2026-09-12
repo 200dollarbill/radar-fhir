@@ -33,8 +33,6 @@ The files are grouped by subject: SATUSEHAT first (files 01–05, what the Indon
 | 15 | `15-fhir-workflow.md` | FHIR R4 workflow patterns — how Observation/Procedure/Condition/Encounter reference each other |
 | — | `validity-review.md` | What was checked, the systemic issues, the conflicts found, and what that means for building the server |
 
-(Files 10–15 and `validity-review.md` are written in a later pass of this compilation; they are listed here in advance so this reading order is complete from the start.)
-
 ## Re-checking freshness
 
 The raw pages can go stale (playbook revisions, spec updates). To check whether the scraped copies in `raw/` still match what is currently published, run:
@@ -43,7 +41,7 @@ The raw pages can go stale (playbook revisions, spec updates). To check whether 
 python3 tools/scrape/check.py
 ```
 
-from the repository root. If this reports drift, the `claude/` and `human/` files built from the stale pages should be re-verified against the new raw content before being trusted again.
+from the repository root. It exits `0` when every source reports `unchanged` or `expected-missing`, and `1` otherwise. Two ids (`res-device`, `res-practitioner-role`) are expected to report `expected-missing` on every run — SATUSEHAT has no profile page for either resource (see `validity-review.md`, S2) — so seeing those two by name is not drift. If any other id reports `changed` or `failed`, the `claude/` and `human/` files built from that page should be re-verified against the new raw content before being trusted again.
 
 To verify the reference views themselves are internally consistent (every `claude/*.md` has sources that exist, every `human/*.md` is indexed here), run:
 

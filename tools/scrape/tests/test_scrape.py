@@ -63,7 +63,7 @@ def test_run_writes_files_and_collects_failures(tmp_path):
     failures = scrape.run(sources, tmp_path, fetch_fn=pages.__getitem__, sleep_fn=lambda s: None)
     assert (tmp_path / "satusehat" / "ok.md").exists()
     assert not (tmp_path / "satusehat" / "missing.md").exists()
-    assert failures == [("missing", "SATUSEHAT redirect notice (page does not exist)")]
+    assert failures == [("missing", "PageMissing: SATUSEHAT redirect notice (page does not exist)")]
 
 
 def test_run_survives_unexpected_exception(tmp_path):
@@ -81,10 +81,23 @@ def test_run_survives_unexpected_exception(tmp_path):
     failures = scrape.run(sources, tmp_path, fetch_fn=fetch_fn, sleep_fn=lambda s: None)
     assert (tmp_path / "satusehat" / "ok.md").exists()
     assert not (tmp_path / "satusehat" / "bad.md").exists()
-    assert failures == [("bad", "boom")]
+    assert failures == [("bad", "RuntimeError: boom")]
+
+
+def test_run_skips_expected_missing(tmp_path):
+    bad = (FIX / "satusehat_redirect.html").read_text(encoding="utf-8")
+    sources = [
+        {"id": "gone", "group": "satusehat", "url": "https://s/gone/", "title": "Gone",
+         "expected_missing": True},
+    ]
+    failures = scrape.run(sources, tmp_path, fetch_fn=lambda u: bad, sleep_fn=lambda s: None)
+    assert failures == []
+    assert not (tmp_path / "satusehat" / "gone.md").exists()
 
 
 @pytest.mark.network
 def test_fetch_real_page_smoke():
     html = scrape.fetch("https://hl7.org/fhir/R4/patient.html")
     assert 'id="segment-content"' in html
+    html2 = scrape.fetch("https://satusehat.kemkes.go.id/platform/docs/id/playbook/introduction/")
+    assert 'class="doc"' in html2
