@@ -2,6 +2,6 @@
 __pycache__/
 *.pyc
 .venv/
-PraTAVENV
+./PraTAVENV
 .gitignore
-
+.tools
