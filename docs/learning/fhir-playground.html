@@ -1,0 +1,690 @@
+<meta charset="utf-8">
+<title>FHIR Pipeline Playground</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#F3F5F7; --panel:#FFFFFF; --panel2:#EAEEF2; --line:#D3DAE1;
+  --ink:#1B2430; --muted:#5B6875; --accent:#0E7C86; --accent-soft:#D9EEF0;
+  --pass:#2E7D32; --pass-soft:#E3F1E4; --fail:#B3261E; --fail-soft:#F8E3E1; --warn:#9A5B00; --warn-soft:#FBEED6;
+  --code-bg:#F7F9FB; --shadow:0 1px 2px rgba(27,36,48,.08);
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0F1418; --panel:#171E24; --panel2:#1F2830; --line:#2C3843;
+  --ink:#E6EBF0; --muted:#93A1AE; --accent:#3FC1C9; --accent-soft:#12343A;
+  --pass:#7BD389; --pass-soft:#16301C; --fail:#F28B82; --fail-soft:#3A1B19; --warn:#F0B35B; --warn-soft:#3A2A10;
+  --code-bg:#11171C; --shadow:0 1px 2px rgba(0,0,0,.4);
+}}
+:root[data-theme="dark"]{
+  --bg:#0F1418; --panel:#171E24; --panel2:#1F2830; --line:#2C3843;
+  --ink:#E6EBF0; --muted:#93A1AE; --accent:#3FC1C9; --accent-soft:#12343A;
+  --pass:#7BD389; --pass-soft:#16301C; --fail:#F28B82; --fail-soft:#3A1B19; --warn:#F0B35B; --warn-soft:#3A2A10;
+  --code-bg:#11171C; --shadow:0 1px 2px rgba(0,0,0,.4);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5}
+.wrap{max-width:1440px;margin:0 auto;padding-inline:20px;padding-block:20px 48px}
+h1,h2,h3{margin:0;text-wrap:balance;font-weight:600}
+h1{font-size:22px;letter-spacing:-.01em}
+h2{font-size:15px}
+h3{font-size:13px}
+p{margin:0}
+code,pre,textarea,.mono{font-family:var(--mono);font-size:12.5px}
+a{color:var(--accent)}
+.eyebrow{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:500}
+.muted{color:var(--muted)}
+button{font:inherit;cursor:pointer;border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:6px 10px}
+button:hover{border-color:var(--accent)}
+button:focus-visible,select:focus-visible,textarea:focus-visible,input:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600;padding:8px 16px}
+:root[data-theme="dark"] button.primary{color:#0F1418}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) button.primary{color:#0F1418} }
+select,input[type=text]{font:inherit;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);padding:5px 8px}
+
+/* header */
+header.top{display:flex;flex-wrap:wrap;gap:10px 24px;align-items:baseline;justify-content:space-between;margin-bottom:16px}
+header.top p{max-width:70ch}
+
+/* signal chain strip */
+.chain{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:0;border:1px solid var(--line);border-radius:8px;background:var(--panel);overflow:hidden;margin-bottom:20px}
+.chain > div{padding:10px 12px;border-right:1px solid var(--line);position:relative}
+.chain > div:last-child{border-right:0}
+.chain .you{font-weight:600;font-size:13px}
+.chain .fhir{color:var(--accent);font-family:var(--mono);font-size:12px;margin-top:2px}
+.chain .why{font-size:12px;color:var(--muted);margin-top:4px}
+.chain > div.lit{background:var(--accent-soft)}
+@media (max-width:900px){.chain{grid-template-columns:repeat(2,1fr)}.chain>div{border-bottom:1px solid var(--line)}}
+
+/* columns */
+.cols{display:grid;grid-template-columns:minmax(300px,1.05fr) minmax(320px,1.2fr) minmax(280px,1fr);gap:16px;align-items:start}
+@media (max-width:1100px){.cols{grid-template-columns:1fr}}
+.col{display:flex;flex-direction:column;gap:12px;min-width:0}
+.colhead{display:flex;align-items:baseline;justify-content:space-between;gap:8px;padding-bottom:6px;border-bottom:2px solid var(--accent)}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;box-shadow:var(--shadow);min-width:0}
+.panel h3{margin-bottom:6px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+label.f{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted)}
+label.f > *{color:var(--ink)}
+.reqline{display:grid;grid-template-columns:auto 1fr;gap:6px 10px;align-items:center;font-family:var(--mono);font-size:12.5px}
+.reqline .k{color:var(--muted)}
+textarea{width:100%;min-height:340px;resize:vertical;border:1px solid var(--line);border-radius:6px;background:var(--code-bg);color:var(--ink);padding:10px;line-height:1.45;tab-size:2}
+pre{margin:0;background:var(--code-bg);border:1px solid var(--line);border-radius:6px;padding:10px;overflow-x:auto;line-height:1.45;white-space:pre}
+.presets{display:flex;flex-wrap:wrap;gap:6px}
+.presets button{font-size:12px;padding:4px 9px}
+.presets button.bad{border-style:dashed}
+.presets button.on{background:var(--accent-soft);border-color:var(--accent)}
+
+/* pipeline */
+.stages{display:flex;flex-direction:column;gap:0}
+.stage{border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:10px 12px;position:relative;opacity:.55;transition:opacity .25s,border-color .25s}
+.stage + .stage{margin-top:8px}
+.stage + .stage::before{content:"";position:absolute;left:22px;top:-9px;height:9px;border-left:2px solid var(--line)}
+.stage.active{opacity:1;border-color:var(--accent)}
+.stage.done{opacity:1}
+.stage.failed{opacity:1;border-color:var(--fail)}
+.stage.skipped{opacity:.4}
+.stage .head{display:flex;align-items:center;gap:10px}
+.stage .num{width:24px;height:24px;border-radius:50%;background:var(--panel2);display:grid;place-items:center;font-family:var(--mono);font-size:12px;font-weight:500;flex:none}
+.stage.done .num{background:var(--pass-soft);color:var(--pass)}
+.stage.failed .num{background:var(--fail-soft);color:var(--fail)}
+.stage.active .num{background:var(--accent-soft);color:var(--accent)}
+.stage .head h3{flex:1}
+.stage .analogy{font-size:12px;color:var(--muted);margin:4px 0 6px 34px}
+.checks{list-style:none;margin:0 0 0 34px;padding:0;display:flex;flex-direction:column;gap:4px}
+.checks li{display:grid;grid-template-columns:18px 1fr;gap:6px;align-items:start;font-size:12.5px}
+.checks .m{font-family:var(--mono);font-weight:500}
+.checks li.ok .m{color:var(--pass)}
+.checks li.bad .m{color:var(--fail)}
+.checks li.warn .m{color:var(--warn)}
+.checks li.bad{background:var(--fail-soft);border-radius:4px;padding:3px 4px;margin-left:-4px}
+.checks li.warn{background:var(--warn-soft);border-radius:4px;padding:3px 4px;margin-left:-4px}
+.checks .src{display:block;color:var(--muted);font-size:11px;font-family:var(--mono);margin-top:1px}
+.checks .rule{color:var(--muted)}
+.stage details{margin:6px 0 0 34px;font-size:12px}
+.stage summary{cursor:pointer;color:var(--accent)}
+
+/* response */
+.resp .status{font-family:var(--mono);font-weight:500;font-size:13px;padding:3px 8px;border-radius:4px;display:inline-block}
+.resp .s2{background:var(--pass-soft);color:var(--pass)}
+.resp .s4{background:var(--fail-soft);color:var(--fail)}
+
+/* consumers */
+.store table{width:100%;border-collapse:collapse;font-size:12.5px}
+.store th,.store td{text-align:left;padding:5px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+.store th{font-weight:500;color:var(--muted);font-size:11px;letter-spacing:.06em;text-transform:uppercase}
+.store td.mono{font-family:var(--mono);font-size:12px}
+.store tr.new td{background:var(--pass-soft)}
+.store button.link{border:0;background:none;padding:0;color:var(--accent);font-family:var(--mono);font-size:12px;text-decoration:underline dotted}
+.readout{display:flex;flex-direction:column;gap:6px}
+.vital{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--panel2)}
+.vital .n{font-weight:500}
+.vital .v{font-family:var(--mono);font-size:16px;font-variant-numeric:tabular-nums;text-align:right}
+.vital .t{grid-column:1/-1;font-size:11px;color:var(--muted);font-family:var(--mono)}
+.tablewrap{overflow-x:auto}
+
+/* glossary / rulings */
+.term{border-bottom:1px dotted var(--accent);cursor:help;color:inherit;background:none;border-top:0;border-left:0;border-right:0;padding:0;font:inherit;border-radius:0}
+dialog{border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--ink);max-width:min(560px,92vw);padding:18px 20px;box-shadow:0 12px 40px rgba(0,0,0,.25)}
+dialog::backdrop{background:rgba(10,14,18,.45)}
+dialog h2{margin-bottom:6px}
+dialog .src{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:10px}
+.rulings{margin-top:20px}
+.rulings table{width:100%;border-collapse:collapse;font-size:12.5px}
+.rulings th,.rulings td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+.rulings th{font-weight:500;color:var(--muted);font-size:11px;letter-spacing:.06em;text-transform:uppercase}
+.fieldguide{margin-top:8px;font-size:12px}
+.fieldguide table{width:100%;border-collapse:collapse}
+.fieldguide td{padding:3px 4px;border-bottom:1px solid var(--line);vertical-align:top}
+.fieldguide td:first-child{font-family:var(--mono);white-space:nowrap;color:var(--accent)}
+.fieldguide td.card{font-family:var(--mono);color:var(--muted);white-space:nowrap}
+.hint{font-size:12px;color:var(--muted)}
+@media (prefers-reduced-motion: reduce){.stage{transition:none}}
+</style>
+
+<div class="wrap">
+<header class="top">
+  <div>
+    <div class="eyebrow">Sub-project 2 · learning tool · nothing here talks to a real server</div>
+    <h1>FHIR Pipeline Playground</h1>
+    <p class="muted">One vital-sign reading from the radar device, followed from JSON on the wire to the doctor's screen. Edit the body on the left, press <strong>POST</strong>, and watch each stage of a SATUSEHAT-style FHIR R4 server accept or reject it. Every check names the reference file it comes from.</p>
+  </div>
+  <div class="row">
+    <button id="btn-glossary" type="button">Glossary</button>
+    <button id="btn-reset" type="button">Reset database</button>
+  </div>
+</header>
+
+<section class="chain" id="chain" aria-label="Signal chain analogy">
+  <div data-stage="0"><div class="you">Sensor → value</div><div class="fhir">Observation</div><div class="why">The radar gives you HR = 72. FHIR needs to know <em>what</em> 72 is, <em>who</em> it belongs to, <em>when</em>, and in <em>which unit</em>.</div></div>
+  <div data-stage="1"><div class="you">Encoding (ADC)</div><div class="fhir">JSON</div><div class="why">The value is serialised as text. A quoted <code>"72"</code> is a string, not a number — the same class of bug as a wrong ADC word length.</div></div>
+  <div data-stage="1"><div class="you">Frame + header</div><div class="fhir">HTTP request</div><div class="why">Method, address, headers = the frame header. Body = payload. <code>Content-Type</code> is the "what encoding" flag.</div></div>
+  <div data-stage="3"><div class="you">Checksum / range check</div><div class="fhir">Validation</div><div class="why">Structure (R4 base rules), then profile (SATUSEHAT tightenings), then references (does that patient exist?).</div></div>
+  <div data-stage="5"><div class="you">Memory / DAQ buffer</div><div class="fhir">Store</div><div class="why">Server assigns an <code>id</code> and a version, and answers <code>201 Created</code>. Nothing is written if any check failed.</div></div>
+  <div data-stage="6"><div class="you">Readout</div><div class="fhir">Search → Bundle</div><div class="why">The doctor asks a question in the URL; the server answers with a Bundle. The patient sees the same data rendered plainly.</div></div>
+</section>
+
+<div class="cols">
+  <!-- ========== CLIENT ========== -->
+  <div class="col">
+    <div class="colhead"><h2>1 · Device / client</h2><span class="eyebrow">builds the request</span></div>
+
+    <div class="panel">
+      <h3>Presets</h3>
+      <p class="hint" style="margin-bottom:8px">Solid outline = should succeed. Dashed = deliberately broken, to show which stage catches it.</p>
+      <div class="presets" id="presets"></div>
+    </div>
+
+    <div class="panel">
+      <h3>HTTP request</h3>
+      <div class="reqline">
+        <span class="k">method</span><span><select id="method"><option>POST</option><option>GET</option><option>PUT</option></select></span>
+        <span class="k">url</span><span><input type="text" id="url" value="/fhir-r4/v1/Observation" style="width:100%"></span>
+        <span class="k">Authorization</span><span><select id="auth"><option value="Bearer eyJhbGciOi…(sandbox token)">Bearer eyJhbGciOi… (token present)</option><option value="">— header missing —</option></select></span>
+        <span class="k">Content-Type</span><span><select id="ctype"><option>application/json</option><option>application/fhir+json</option><option>text/plain</option></select></span>
+      </div>
+      <p class="hint" style="margin-top:8px">SATUSEHAT's playbook says <code>application/json</code>; FHIR R4 says <code>application/fhir+json</code>. This server accepts both and always answers with <code>application/fhir+json</code> (ruling below).</p>
+    </div>
+
+    <div class="panel">
+      <div class="row" style="justify-content:space-between;margin-bottom:6px">
+        <h3 style="margin:0">Body — the Observation resource</h3>
+        <button id="btn-format" type="button" title="Re-indent the JSON">Format</button>
+      </div>
+      <textarea id="body" spellcheck="false" aria-label="Request body JSON"></textarea>
+      <div class="row" style="margin-top:10px;justify-content:space-between">
+        <button class="primary" id="btn-send" type="button">POST ▶ send to server</button>
+        <span class="hint" id="bodystat"></span>
+      </div>
+      <details class="fieldguide" open>
+        <summary style="cursor:pointer;color:var(--accent)">What each top-level field means (from the body above)</summary>
+        <div class="tablewrap"><table id="fieldguide"></table></div>
+      </details>
+    </div>
+  </div>
+
+  <!-- ========== SERVER ========== -->
+  <div class="col">
+    <div class="colhead"><h2>2 · Server pipeline</h2><span class="eyebrow">processor, then store</span></div>
+    <div class="stages" id="stages"></div>
+    <div class="panel resp" id="response" hidden>
+      <h3>HTTP response</h3>
+      <div id="resp-status" class="row"></div>
+      <pre id="resp-headers" style="margin-top:8px"></pre>
+      <pre id="resp-body" style="margin-top:8px"></pre>
+    </div>
+  </div>
+
+  <!-- ========== CONSUMERS ========== -->
+  <div class="col">
+    <div class="colhead"><h2>3 · Consumers</h2><span class="eyebrow">read it back</span></div>
+
+    <div class="panel store">
+      <h3>What is in the database</h3>
+      <p class="hint" style="margin-bottom:6px">Pre-seeded so an Observation has something to point at. Click an id to see its JSON. Rows in green were created by you.</p>
+      <div class="tablewrap"><table id="store"></table></div>
+    </div>
+
+    <div class="panel">
+      <h3>Doctor's worklist query</h3>
+      <div class="reqline" style="margin-bottom:8px">
+        <span class="k">GET</span><span><input type="text" id="q" value="/fhir-r4/v1/Observation?patient=P02478375538&category=vital-signs" style="width:100%"></span>
+      </div>
+      <div class="row" style="margin-bottom:8px">
+        <button id="btn-query" type="button">Run search</button>
+        <button id="btn-q1" type="button" class="hint">HR only</button>
+        <button id="btn-q2" type="button" class="hint">BP via code</button>
+        <button id="btn-q3" type="button" class="hint">BP via combo-code</button>
+      </div>
+      <p class="hint" id="qnote" style="margin-bottom:6px"></p>
+      <pre id="qresult">— run a search —</pre>
+    </div>
+
+    <div class="panel">
+      <h3>Patient's view</h3>
+      <p class="hint" style="margin-bottom:8px">Same resources, rendered for Budi. The patient role sees only <code>subject = Patient/P02478375538</code>.</p>
+      <div class="readout" id="readout"></div>
+    </div>
+  </div>
+</div>
+
+<section class="rulings panel">
+  <h2 style="margin-bottom:4px">Rulings this playground makes where the sources disagree</h2>
+  <p class="hint" style="margin-bottom:10px">CLAUDE.md: "Do not silently pick a side." These are the sides picked here, and why. They are proposals for the real server, not decisions.</p>
+  <div class="tablewrap"><table>
+    <tr><th>Topic</th><th>Source A</th><th>Source B</th><th>Playground does</th></tr>
+    <tr><td>Request media type</td><td>SATUSEHAT: <code>Content-Type: application/json</code> (satusehat-rest-api-and-validation.md)</td><td>R4: clients and servers SHALL use <code>application/fhir+json</code>; 415 when unsupported (fhir-rest-api.md)</td><td>Accept both; emit <code>application/fhir+json</code>. VALIDITY-REVIEW.md consequence list.</td></tr>
+    <tr><td>Blood pressure shape</td><td>SATUSEHAT Rawat Jalan: two standalone Observations, 8480-6 and 8462-4 (S11)</td><td>R4 Vital Signs: one 85354-9 panel with both as <code>component</code> (fhir-observation.md)</td><td>Accept both shapes. Store what was sent; a real server would store the panel and derive the pair on export (CLAUDE.md).</td></tr>
+    <tr><td>Earliest allowed date</td><td>Profile pages: not before 2014-06-03</td><td>RuleNumber 10132 text: not older than 2022-08-31</td><td>2014-06-03, the profile-page value (S4 recommendation).</td></tr>
+    <tr><td>Time zone</td><td>SATUSEHAT: send UTC+00, e.g. <code>…T10:35:00+00:00</code></td><td>R4: any offset is valid; a zone is required when a time is present</td><td>Require a zone (error); non-zero offset is a warning, not a rejection. Stored value would be normalised to UTC.</td></tr>
+    <tr><td>SpO₂ code</td><td>SATUSEHAT corpus: no SpO₂ LOINC at all (S11, S29)</td><td>R4 Vital Signs: 2708-6, unit <code>%</code></td><td>Use 2708-6 / <code>%</code> and say so in the profile.</td></tr>
+    <tr><td><code>Observation.performer</code></td><td>Rawat Jalan use case: wajib</td><td>Observation profile page: not starred; R4 0..*</td><td>Optional for device-sourced readings (S8). Not checked here.</td></tr>
+    <tr><td>Device profile</td><td>SATUSEHAT: no Device page at all (S2)</td><td>R4 Device / DeviceMetric exist</td><td>Seeded Device is plain R4. Its profile is a later sub-project goal.</td></tr>
+  </table></div>
+</section>
+</div>
+
+<dialog id="dlg"><div id="dlg-body"></div><div class="row" style="margin-top:14px;justify-content:flex-end"><button type="button" id="dlg-close">Close</button></div></dialog>
+
+<script>
+/* ---------- reference data ---------- */
+const SRC = {
+  obs:  'claude/fhir-observation.md',
+  sobs: 'claude/satusehat-observation.md',
+  rest: 'claude/fhir-rest-api.md',
+  srest:'claude/satusehat-rest-api-and-validation.md',
+  dm:   'claude/fhir-datamodel-basics.md',
+  vr:   'claude/VALIDITY-REVIEW.md',
+  ids:  'claude/satusehat-identifiers-and-master-data.md',
+  uc:   'claude/satusehat-usecase-rawat-jalan.md',
+};
+const LOINC = 'http://loinc.org', UCUM = 'http://unitsofmeasure.org';
+const CAT_SYS = 'http://terminology.hl7.org/CodeSystem/observation-category';
+// R4 Vital Signs "magic values" (fhir-observation.md §Vital-sign codes). 2708-6 is our local SpO2 choice.
+const VITALS = {
+  '8867-4': {name:'Heart rate', units:['/min']},
+  '9279-1': {name:'Respiratory rate', units:['/min']},
+  '8310-5': {name:'Body temperature', units:['Cel','[degF]']},
+  '2708-6': {name:'Oxygen saturation (local choice, not in SATUSEHAT corpus)', units:['%']},
+  '29463-7':{name:'Body weight', units:['g','kg','[lb_av]']},
+  '8302-2': {name:'Body height', units:['cm','[in_i]']},
+  '85354-9':{name:'Blood pressure panel', units:[], panel:true},
+  '8480-6': {name:'Systolic blood pressure', units:['mm[Hg]']},
+  '8462-4': {name:'Diastolic blood pressure', units:['mm[Hg]']},
+};
+const STATUS_CODES = ['registered','preliminary','final','amended','corrected','cancelled','entered-in-error','unknown'];
+const DT_RE = /^(\d{4})(-(0[1-9]|1[0-2])(-(0[1-9]|[12]\d|3[01])(T([01]\d|2[0-3]):[0-5]\d:([0-5]\d|60)(\.\d+)?(Z|[+-]((0\d|1[0-3]):[0-5]\d|14:00)))?)?)?$/;
+const MIN_DATE = new Date('2014-06-03T00:00:00Z');
+
+const FIELD_DOC = {
+  resourceType:['1..1','Which kind of FHIR resource this JSON is. Decides which rule table applies.', SRC.dm],
+  id:['0..1','Server-assigned. On POST it is ignored; the server mints its own.', SRC.rest],
+  meta:['0..1','Server-assigned bookkeeping: versionId, lastUpdated, profile.', SRC.rest],
+  identifier:['0..*','Business identifier the facility uses internally; system URI is per-organisation.', SRC.sobs],
+  status:['1..1 · wajib','Lifecycle of the result: registered / preliminary / final / amended … Modifier element.', SRC.obs],
+  category:['0..* (Vital Signs: required)','Coarse class: vital-signs, laboratory, exam … The doctor searches by it.', SRC.obs],
+  code:['1..1 · wajib','WHAT was measured. LOINC code = the "magic value" for vital signs.', SRC.obs],
+  subject:['0..1 · wajib','WHO it is about — Patient/{ihs-number}.', SRC.sobs],
+  encounter:['0..1 · wajib','WHICH visit it belongs to — Encounter/{uuid}. SATUSEHAT makes this mandatory.', SRC.sobs],
+  effectiveDateTime:['0..1 (Vital Signs: required)','WHEN it was measured, clinically. ISO 8601 with time zone.', SRC.obs],
+  issued:['0..1','When this version was released by the system (instant).', SRC.obs],
+  performer:['0..*','WHO is responsible. Optional for a device feed (S8).', SRC.vr],
+  valueQuantity:['0..1 (Vital Signs: value or dataAbsentReason)','THE NUMBER + UCUM unit. Must be a JSON number, not a string.', SRC.obs],
+  valueString:['0..1','A text result; not for vital signs.', SRC.obs],
+  dataAbsentReason:['0..1','Why there is no value. May not coexist with value[x] (obs-6).', SRC.obs],
+  device:['0..1','Reference(Device | DeviceMetric) — the radar unit that produced it.', SRC.obs],
+  component:['0..*','Sub-results with their own code + value; how R4 shapes blood pressure.', SRC.obs],
+  bodySite:['0..1','Where on the body (SNOMED CT).', SRC.obs],
+  method:['0..1','How it was measured (SNOMED CT).', SRC.obs],
+  note:['0..*','Free-text annotation.', SRC.obs],
+  interpretation:['0..*','High / low / normal flags.', SRC.obs],
+  referenceRange:['0..*','Normal range; needs low or high or text (obs-3).', SRC.obs],
+};
+
+const GLOSSARY = {
+  'resource':['Resource','The unit of exchange in FHIR: one JSON object with a resourceType. Patient, Observation, Encounter and Device are all resources. Think "one record in one table", except every table has a nationally agreed schema.', SRC.dm],
+  'profile':['Profile','A set of extra constraints on a base resource — tighter cardinality, fixed code systems, mandatory (wajib) elements. SATUSEHAT publishes profiles for most resources; R4 Vital Signs is the profile the Observation page says you SHALL follow for vital signs.', 'claude/fhir-profiling.md'],
+  'wajib':['Wajib','Indonesian for mandatory. On SATUSEHAT profile pages a * marks an element as wajib. R4 uses 1..1 cardinality for the same idea.', SRC.sobs],
+  'loinc':['LOINC','Logical Observation Identifiers Names and Codes — the code system for "what was measured". 8867-4 means heart rate everywhere on earth. system URI: http://loinc.org', SRC.obs],
+  'ucum':['UCUM','Unified Code for Units of Measure — the unit code system. /min, mm[Hg], Cel, %. system URI: http://unitsofmeasure.org', SRC.obs],
+  'reference':['Reference','A pointer from one resource to another, written as "Type/id". The server should check the target exists — that is the referential-integrity check in stage 5.', SRC.dm],
+  'bundle':['Bundle','A container resource holding many resources: a search result (type searchset) or a transaction. The doctor\'s query returns one.', SRC.rest],
+  'operationoutcome':['OperationOutcome','The resource a FHIR server returns to explain an error: severity, code, a human message, and the path of the offending element. SATUSEHAT adds a RuleNumber to the message.', SRC.srest],
+  'cardinality':['Cardinality','min..max occurrences. 1..1 = exactly one; 0..* = any number, may be absent. In JSON, 0..* elements are arrays, 0..1 elements are not.', SRC.dm],
+};
+
+/* ---------- seed database ---------- */
+const ORG_ID = '10000004', PAT_ID = 'P02478375538', PRAC_ID = 'N10000001', ENC_ID = '2823ed1d-3e3e-434e-9a5b-9c579d192787', DEV_ID = 'dev-radar-001';
+function seed(){
+  return {
+    ['Organization/'+ORG_ID]: {resourceType:'Organization', id:ORG_ID, active:true, name:'RSUD Contoh (seed)', identifier:[{system:'http://sys-ids.kemkes.go.id/organization/'+ORG_ID, value:'RSUD-CONTOH'}]},
+    ['Practitioner/'+PRAC_ID]: {resourceType:'Practitioner', id:PRAC_ID, identifier:[{system:'https://fhir.kemkes.go.id/id/nik', value:'3171000000000002'}], name:[{use:'official', text:'dr. Sari Wulandari'}]},
+    ['Patient/'+PAT_ID]: {resourceType:'Patient', id:PAT_ID, identifier:[{system:'https://fhir.kemkes.go.id/id/nik', value:'3171000000000001'},{system:'https://fhir.kemkes.go.id/id/ihs-number', value:PAT_ID}], name:[{use:'official', text:'Budi Santoso'}], gender:'male', birthDate:'1979-04-12'},
+    ['Encounter/'+ENC_ID]: {resourceType:'Encounter', id:ENC_ID, identifier:[{system:'http://sys-ids.kemkes.go.id/encounter/'+ORG_ID, use:'official', value:'P20260001'}], status:'in-progress', class:{system:'http://terminology.hl7.org/CodeSystem/v3-ActCode', code:'AMB', display:'ambulatory'}, subject:{reference:'Patient/'+PAT_ID, display:'Budi Santoso'}, participant:[{individual:{reference:'Practitioner/'+PRAC_ID}}], period:{start:'2026-09-13T01:30:00+00:00'}, serviceProvider:{reference:'Organization/'+ORG_ID}},
+    ['Device/'+DEV_ID]: {resourceType:'Device', id:DEV_ID, status:'active', manufacturer:'Lab Pra-TA', deviceName:[{name:'Contactless radar vital-sign monitor', type:'user-friendly-name'}], type:{text:'Radar-based JVP / carotid pulse monitor (no SATUSEHAT profile exists — S2)'}, patient:{reference:'Patient/'+PAT_ID}, owner:{reference:'Organization/'+ORG_ID}},
+  };
+}
+let DB = seed();
+let created = new Set();
+
+/* ---------- presets ---------- */
+const base = () => ({
+  resourceType:'Observation',
+  identifier:[{system:'http://sys-ids.kemkes.go.id/observation/'+ORG_ID, use:'official', value:'RADAR-000123'}],
+  status:'final',
+  category:[{coding:[{system:CAT_SYS, code:'vital-signs', display:'Vital Signs'}]}],
+  code:{coding:[{system:LOINC, code:'8867-4', display:'Heart rate'}]},
+  subject:{reference:'Patient/'+PAT_ID},
+  encounter:{reference:'Encounter/'+ENC_ID},
+  effectiveDateTime:'2026-09-13T02:14:00+00:00',
+  device:{reference:'Device/'+DEV_ID},
+  valueQuantity:{value:72, unit:'beats/minute', system:UCUM, code:'/min'},
+});
+const PRESETS = [
+  {id:'hr', label:'Heart rate 72 (valid)', good:true, make:base},
+  {id:'bp-r4', label:'BP 120/80 — R4 panel', good:true, make:()=>{const o=base(); o.identifier[0].value='RADAR-000124'; o.code={coding:[{system:LOINC,code:'85354-9',display:'Blood pressure panel with all children optional'}]}; delete o.valueQuantity; o.component=[{code:{coding:[{system:LOINC,code:'8480-6',display:'Systolic blood pressure'}]},valueQuantity:{value:120,unit:'mmHg',system:UCUM,code:'mm[Hg]'}},{code:{coding:[{system:LOINC,code:'8462-4',display:'Diastolic blood pressure'}]},valueQuantity:{value:80,unit:'mmHg',system:UCUM,code:'mm[Hg]'}}]; return o;}},
+  {id:'bp-ss', label:'Systolic 120 — SATUSEHAT standalone', good:true, make:()=>{const o=base(); o.identifier[0].value='RADAR-000125'; o.code={coding:[{system:LOINC,code:'8480-6',display:'Systolic blood pressure'}]}; o.valueQuantity={value:120,unit:'mmHg',system:UCUM,code:'mm[Hg]'}; return o;}},
+  {id:'spo2', label:'SpO₂ 97 % (local code)', good:true, make:()=>{const o=base(); o.identifier[0].value='RADAR-000126'; o.code={coding:[{system:LOINC,code:'2708-6',display:'Oxygen saturation in Arterial blood'}]}; o.valueQuantity={value:97,unit:'%',system:UCUM,code:'%'}; return o;}},
+  {id:'unit', label:'Wrong unit (bpm)', good:false, make:()=>{const o=base(); o.valueQuantity.code='bpm'; o.valueQuantity.unit='bpm'; return o;}},
+  {id:'str', label:'Value as string "72"', good:false, make:()=>{const o=base(); o.valueQuantity.value='72'; return o;}},
+  {id:'nosubj', label:'Missing subject', good:false, make:()=>{const o=base(); delete o.subject; return o;}},
+  {id:'noenc', label:'Missing encounter', good:false, make:()=>{const o=base(); delete o.encounter; return o;}},
+  {id:'ghost', label:'Unknown patient', good:false, make:()=>{const o=base(); o.subject.reference='Patient/P00000000000'; return o;}},
+  {id:'tz', label:'Date without time zone', good:false, make:()=>{const o=base(); o.effectiveDateTime='2026-09-13T09:14:00'; return o;}},
+  {id:'old', label:'Date from 2009', good:false, make:()=>{const o=base(); o.effectiveDateTime='2009-01-05T02:14:00+00:00'; return o;}},
+  {id:'wib', label:'Date in WIB (+07:00)', good:true, make:()=>{const o=base(); o.effectiveDateTime='2026-09-13T09:14:00+07:00'; return o;}},
+  {id:'nocat', label:'No category', good:false, make:()=>{const o=base(); delete o.category; return o;}},
+  {id:'sys', label:'Wrong code system', good:false, make:()=>{const o=base(); o.code.coding[0].system='http://snomed.info/sct'; return o;}},
+  {id:'obs6', label:'value + dataAbsentReason', good:false, make:()=>{const o=base(); o.dataAbsentReason={coding:[{system:'http://terminology.hl7.org/CodeSystem/data-absent-reason',code:'unknown'}]}; return o;}},
+  {id:'bp-half', label:'BP panel, no diastolic', good:false, make:()=>{const o=base(); o.code={coding:[{system:LOINC,code:'85354-9'}]}; delete o.valueQuantity; o.component=[{code:{coding:[{system:LOINC,code:'8480-6'}]},valueQuantity:{value:120,unit:'mmHg',system:UCUM,code:'mm[Hg]'}}]; return o;}},
+  {id:'arr', label:'subject as array', good:false, make:()=>{const o=base(); o.subject=[o.subject]; return o;}},
+  {id:'json', label:'Broken JSON', good:false, raw:'{\n  "resourceType": "Observation",\n  "status": "final",\n  "code": { "coding": [ { "system": "http://loinc.org", "code": "8867-4" } ] }\n  "subject": { "reference": "Patient/P02478375538" }\n}'},
+];
+
+/* ---------- stage definitions ---------- */
+const STAGES = [
+  {n:1, title:'Transport — HTTP', analogy:'Frame header: is this addressed to me, is the sender authorised, do I understand the encoding?'},
+  {n:2, title:'Parse — bytes → JSON', analogy:'ADC readback: can the text even be decoded into a structure?'},
+  {n:3, title:'FHIR R4 structure', analogy:'Word length and field order: base-spec rules every FHIR server enforces, before anything Indonesian.'},
+  {n:4, title:'SATUSEHAT profile + terminology', analogy:'Range check against the national profile: wajib elements, LOINC/UCUM systems, dates.'},
+  {n:5, title:'References — does the target exist?', analogy:'Cable actually plugged in: subject, encounter, device must resolve to stored resources.'},
+  {n:6, title:'Store', analogy:'Write to buffer: assign id + version, stamp lastUpdated. Only reached if 1–5 passed.'},
+];
+
+/* ---------- validation engine ---------- */
+function isObj(x){return x && typeof x==='object' && !Array.isArray(x);}
+function oo(issues){
+  return {resourceType:'OperationOutcome', issue: issues.map(i=>({severity:'error', code:i.oocode||'value', details:{text:i.msg + (i.rule?` (RuleNumber: ${i.rule})`:'')}, expression:i.path?[i.path]:undefined}))};
+}
+function ck(list, ok, msg, src, opts={}){ list.push({ok, msg, src, ...opts}); return ok; }
+
+function runPipeline(req){
+  const result = {stages:[], status:null, headers:{}, body:null, stored:null};
+  let failed = false;
+  const stage = (i)=>{ const s={n:i+1, checks:[], state:'pending'}; result.stages.push(s); return s; };
+
+  // 1. transport
+  {
+    const s = stage(0); const c = s.checks;
+    const ok1 = ck(c, req.method==='POST' && /^\/fhir-r4\/v1\/Observation\/?$/.test(req.url), `${req.method} ${req.url} → create interaction on type Observation`, SRC.rest, {rule:'create = POST [base]/[type]'});
+    const ok2 = ck(c, !!req.auth, 'Authorization: Bearer <token> present', SRC.srest, {rule:'every request WAJIB authenticated'});
+    const ct = (req.ctype||'').toLowerCase();
+    const ok3 = ck(c, ct==='application/json'||ct==='application/fhir+json', `Content-Type ${req.ctype} accepted`, SRC.rest+' + '+SRC.vr, {rule: ct==='application/fhir+json' ? 'R4 SHALL media type' : ct==='application/json' ? 'SATUSEHAT form — accepted by ruling' : '415 Unsupported Media Type'});
+    if(!ok2){ s.state='failed'; result.status=401; result.body=oo([{msg:'Authentication required: Authorization header missing', oocode:'login', path:null}]); failed=true; }
+    else if(!ok1){ s.state='failed'; result.status=405; result.body=oo([{msg:`Interaction ${req.method} on ${req.url} is not supported`, oocode:'not-supported'}]); failed=true; }
+    else if(!ok3){ s.state='failed'; result.status=415; result.body=oo([{msg:`Unsupported media type: ${req.ctype}`, oocode:'not-supported'}]); failed=true; }
+    else s.state='done';
+  }
+  if(failed) return finish(result);
+
+  // 2. parse
+  let res;
+  {
+    const s = stage(1); const c = s.checks;
+    try { res = JSON.parse(req.body); ck(c,true,`JSON.parse OK — ${req.body.length} bytes → object with ${Object.keys(res).length} keys`, SRC.dm); s.state='done'; }
+    catch(e){ ck(c,false,'JSON.parse failed: '+e.message, SRC.dm, {rule:'400 parse'}); s.state='failed'; result.status=400; result.body=oo([{msg:'Invalid JSON: '+e.message, oocode:'structure'}]); failed=true; }
+  }
+  if(failed) return finish(result);
+
+  // 3. R4 structure
+  const issues=[];
+  {
+    const s = stage(2); const c = s.checks;
+    const add=(ok,msg,src,opts,issue)=>{ ck(c,ok,msg,src,opts); if(!ok&&issue) issues.push(issue); };
+    add(res.resourceType==='Observation', `resourceType = "${res.resourceType}"`, SRC.dm, {rule:'must name the type at the URL'}, {msg:`Expected resourceType Observation, got ${res.resourceType}`, oocode:'structure', path:'Observation.resourceType'});
+    // single-valued elements must not be arrays (S13)
+    for(const k of ['subject','encounter','code','effectiveDateTime','valueQuantity','device','dataAbsentReason']){
+      if(k in res && Array.isArray(res[k])) add(false, `${k} is 0..1 but was sent as a JSON array`, SRC.vr, {rule:'S13 — playbook examples wrap 0..1 in arrays'}, {msg:`Element ${k} is 0..1; a JSON array is a structure error`, oocode:'structure', path:'Observation.'+k});
+    }
+    add(typeof res.status==='string' && STATUS_CODES.includes(res.status), `status 1..1, code from ObservationStatus (required binding) — "${res.status}"`, SRC.obs, {rule:'Observation.status 1..1'}, {msg:`Element not found or invalid: Observation.status`, oocode:'value', path:'Observation.status', rule:'10263'});
+    add(isObj(res.code) && Array.isArray(res.code.coding) && res.code.coding.length>0, 'code 1..1 CodeableConcept with ≥1 coding', SRC.obs, {rule:'Observation.code 1..1'}, {msg:'Element not found: Observation.code.coding', oocode:'value', path:'Observation.code', rule:'10263'});
+    if('valueQuantity' in res){
+      const v=res.valueQuantity;
+      add(isObj(v) && typeof v.value==='number', `valueQuantity.value is a JSON number (${JSON.stringify(v && v.value)})`, SRC.dm+' / '+SRC.srest, {rule:'decimal, unquoted'}, {msg:`Integer formated as a string: '${v&&v.value}'`, oocode:'value', path:'Observation.valueQuantity.value', rule:'10254'});
+    }
+    if('effectiveDateTime' in res){
+      const d=res.effectiveDateTime; const m = typeof d==='string' && DT_RE.test(d);
+      add(m, `effectiveDateTime matches R4 dateTime regex — "${d}"`, SRC.dm, {rule:'zone required when time is present'}, {msg:`Invalid date time format : ${d}. Format allowed : YYYY-MM-DDThh:mm:ss+00:00`, oocode:'format', path:'Observation.effectiveDateTime', rule:'10132'});
+    }
+    // obs-6
+    add(!('dataAbsentReason' in res) || !Object.keys(res).some(k=>k.startsWith('value')), 'obs-6: dataAbsentReason only when value[x] absent', SRC.obs, {rule:'dataAbsentReason.empty() or value.empty()'}, {msg:'obs-6: dataAbsentReason SHALL only be present if Observation.value[x] is not present', oocode:'invariant', path:'Observation'});
+    // components
+    if(Array.isArray(res.component)){
+      res.component.forEach((cp,i)=>{
+        add(isObj(cp) && isObj(cp.code) && Array.isArray(cp.code.coding), `component[${i}].code 1..1`, SRC.obs, {rule:'component.code 1..1'}, {msg:`Element not found: Observation.component[${i}].code`, oocode:'value', path:`Observation.component[${i}].code`, rule:'10263'});
+      });
+      // obs-7
+      const rootCodes = (res.code&&res.code.coding||[]).map(x=>x.code);
+      const clash = res.component.some(cp=>(cp.code&&cp.code.coding||[]).some(x=>rootCodes.includes(x.code)));
+      add(!(clash && Object.keys(res).some(k=>k.startsWith('value'))), 'obs-7: no value[x] on root when code = a component.code', SRC.obs, {rule:'obs-7'}, {msg:'obs-7 violated', oocode:'invariant', path:'Observation'});
+    }
+    // Vital Signs profile BP rule
+    const rootCode = res.code&&res.code.coding&&res.code.coding[0]&&res.code.coding[0].code;
+    if(rootCode==='85354-9'){
+      const codes=(res.component||[]).map(cp=>cp.code&&cp.code.coding&&cp.code.coding[0]&&cp.code.coding[0].code);
+      add(codes.includes('8480-6')&&codes.includes('8462-4'), 'Vital Signs: BP panel 85354-9 has both systolic 8480-6 and diastolic 8462-4 components', SRC.obs, {rule:'"must have both a systolic and a diastolic component"'}, {msg:'Blood pressure observation must have both a systolic and a diastolic component', oocode:'invariant', path:'Observation.component'});
+      add(!('valueQuantity' in res), 'Vital Signs: BP panel carries no root valueQuantity', SRC.obs, {rule:'85354-9 — no valueQuantity'}, {msg:'Blood pressure panel must not carry Observation.valueQuantity', oocode:'invariant', path:'Observation.valueQuantity'});
+    }
+    s.state = issues.length ? 'failed' : 'done';
+  }
+  if(issues.length){ result.status=400; result.body=oo(issues); return finish(result); }
+
+  // 4. SATUSEHAT profile + terminology
+  {
+    const s = stage(3); const c = s.checks;
+    const add=(ok,msg,src,opts,issue)=>{ ck(c,ok,msg,src,opts); if(!ok&&issue) issues.push(issue); };
+    add(isObj(res.subject) && typeof res.subject.reference==='string', 'wajib *subject present', SRC.sobs, {rule:'* on profile page'}, {msg:'Element not found: Observation.subject', oocode:'value', path:'Observation.subject', rule:'10263'});
+    add(isObj(res.encounter) && typeof res.encounter.reference==='string', 'wajib *encounter present (R4 alone would allow its absence)', SRC.sobs, {rule:'* on profile page; R4 0..1'}, {msg:'Element not found: Observation.encounter', oocode:'value', path:'Observation.encounter', rule:'10263'});
+    const cat = (res.category||[]).some(cc=>(cc.coding||[]).some(x=>x.system===CAT_SYS&&x.code==='vital-signs'));
+    add(cat, 'category = vital-signs (R4 Vital Signs profile item 2; SATUSEHAT example value)', SRC.obs+' / '+SRC.sobs, {rule:CAT_SYS}, {msg:'Element not found: Observation.category[vital-signs]', oocode:'value', path:'Observation.category', rule:'10263'});
+    const coding = res.code.coding[0];
+    add(coding.system===LOINC, `code.coding.system = ${coding.system}`, SRC.sobs, {rule:'LOINC for Observation.code'}, {msg:`Invalid coding system: ${coding.system}`, oocode:'value', path:'Observation.code.coding[0].system', rule:'10002'});
+    const known = VITALS[coding.code];
+    add(!!known, `LOINC ${coding.code}${known?' = '+known.name:' not in the vital-sign table'}`, SRC.obs+' / '+SRC.uc, {rule:'vital-sign "magic values"'}, {msg:`Code not found: '${coding.code}' in system: ${LOINC}`, oocode:'value', path:'Observation.code.coding[0].code', rule:'10001'});
+    const checkQty=(q,path,k)=>{
+      if(!q) return;
+      add(q.system===UCUM, `${path}.system = UCUM`, SRC.sobs, {rule:UCUM}, {msg:`Invalid coding system: ${q.system}`, oocode:'value', path:'Observation.'+path+'.system', rule:'10002'});
+      if(k && k.units.length) add(k.units.includes(q.code), `${path}.code "${q.code}" is a UCUM unit allowed for ${k.name} (${k.units.join(', ')})`, SRC.obs, {rule:'Unit Code column'}, {msg:`Code not found: '${q.code}' in system: ${UCUM} for ${k.name}`, oocode:'value', path:'Observation.'+path+'.code', rule:'10001'});
+    };
+    checkQty(res.valueQuantity,'valueQuantity',known);
+    (res.component||[]).forEach((cp,i)=>{ const cc=cp.code.coding[0]; add(cc.system===LOINC, `component[${i}].code.system = LOINC`, SRC.vr, {rule:'S24 — bind component.code to LOINC like code'}, {msg:`Invalid coding system: ${cc.system}`, oocode:'value', path:`Observation.component[${i}].code.coding[0].system`, rule:'10002'}); checkQty(cp.valueQuantity,`component[${i}].valueQuantity`,VITALS[cc.code]); });
+    if(!('valueQuantity' in res) && !known?.panel && !('dataAbsentReason' in res)) add(false, 'Vital Signs: numeric value or dataAbsentReason required', SRC.obs, {rule:'item 6'}, {msg:'Element not found: Observation.value[x] or dataAbsentReason', oocode:'value', path:'Observation.value[x]', rule:'10263'});
+    add('effectiveDateTime' in res || 'effectivePeriod' in res, 'Vital Signs: effective[x] present (when it was taken)', SRC.obs, {rule:'item 5'}, {msg:'Element not found: Observation.effective[x]', oocode:'value', path:'Observation.effective[x]', rule:'10263'});
+    if(typeof res.effectiveDateTime==='string'){
+      const d = new Date(res.effectiveDateTime);
+      add(d >= MIN_DATE, `effectiveDateTime not earlier than 2014-06-03 (ruling: profile-page bound, S4)`, SRC.sobs+' / '+SRC.vr, {rule:'S4'}, {msg:`Invalid date time value : ${res.effectiveDateTime} Not Allowed : Past Date older than 03 June 2014`, oocode:'value', path:'Observation.effectiveDateTime', rule:'10132'});
+      add(d <= new Date(Date.now()+5*60000), 'effectiveDateTime is not in the future', SRC.srest, {rule:'10132 value'}, {msg:`Invalid date time value : ${res.effectiveDateTime} Not Allowed : Future Date`, oocode:'value', path:'Observation.effectiveDateTime', rule:'10132'});
+      const utc = /(\+00:00|Z)$/.test(res.effectiveDateTime);
+      ck(c, true, utc ? 'sent in UTC+00 as SATUSEHAT asks' : `offset is not +00:00 — accepted, stored as ${d.toISOString().replace('.000Z','+00:00')} (ruling)`, SRC.sobs, {rule:'UTC+00 rule', warn:!utc});
+    }
+    if(coding.code==='2708-6') ck(c,true,'SpO₂ uses 2708-6 / % — our local choice; absent from the SATUSEHAT corpus (S11)', SRC.vr, {warn:true});
+    if(coding.code==='8480-6'||coding.code==='8462-4') ck(c,true,'Standalone systolic/diastolic — the SATUSEHAT shape; R4 Vital Signs would want the 85354-9 panel (ruling: accept both)', SRC.vr, {warn:true, rule:'S11'});
+    s.state = issues.length ? 'failed' : 'done';
+  }
+  if(issues.length){ result.status=422; result.body=oo(issues); return finish(result); }
+
+  // 5. references
+  {
+    const s = stage(4); const c = s.checks;
+    const add=(ok,msg,src,opts,issue)=>{ ck(c,ok,msg,src,opts); if(!ok&&issue) issues.push(issue); };
+    const refs=[['subject',res.subject,/^Patient\//],['encounter',res.encounter,/^Encounter\//],['device',res.device,/^(Device|DeviceMetric)\//]];
+    for(const p of (res.performer||[])) refs.push(['performer',p,/^(Practitioner|PractitionerRole|Organization)\//]);
+    for(const [name,ref,typeRe] of refs){
+      if(!ref) continue;
+      const r=ref.reference;
+      const typeOk = typeRe.test(r);
+      add(typeOk, `${name} → "${r}" targets an allowed type`, SRC.obs, {rule:'Reference(...) type list'}, {msg:`Reference ${r} has wrong target type for Observation.${name}`, oocode:'value', path:'Observation.'+name});
+      if(typeOk) add(r in DB, `${name} → "${r}" exists in the store`, SRC.sobs, {rule:'server should validate targets exist'}, {msg:`Reference is mandatory : Observation.${name} — target ${r} not found`, oocode:'value', path:'Observation.'+name, rule:'10124'});
+    }
+    s.state = issues.length ? 'failed' : 'done';
+  }
+  if(issues.length){ result.status=422; result.body=oo(issues); return finish(result); }
+
+  // 6. store
+  {
+    const s = stage(5); const c = s.checks;
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString().replace(/\.\d{3}Z$/,'+00:00');
+    const stored = {...res}; delete stored.id;
+    stored.id = id; stored.meta = {versionId:'1', lastUpdated: now, profile:['https://fhir.kemkes.go.id/r4/StructureDefinition/Observation']};
+    // reorder so id/meta sit after resourceType for readability
+    const ordered = {resourceType:stored.resourceType, id:stored.id, meta:stored.meta}; for(const k of Object.keys(stored)) if(!(k in ordered)) ordered[k]=stored[k];
+    DB['Observation/'+id] = ordered; created.add('Observation/'+id);
+    ck(c,true,`client id ignored; server minted id ${id}`, SRC.rest, {rule:'create: id SHALL be ignored'});
+    ck(c,true,`meta.versionId = 1, meta.lastUpdated = ${now}`, SRC.rest, {rule:'ETag / Last-Modified'});
+    ck(c,true,'written to the Observation table; nothing was written by any failed request before this', SRC.srest, {rule:'processor then server'});
+    s.state='done';
+    result.status=201; result.body=ordered; result.stored=ordered;
+    result.headers={'Location':`/fhir-r4/v1/Observation/${id}/_history/1`, 'ETag':'W/"1"', 'Last-Modified':new Date().toUTCString()};
+  }
+  return finish(result);
+
+  function finish(r){
+    const reached = r.stages.length;
+    for(let i=reached;i<6;i++) r.stages.push({n:i+1, checks:[], state:'skipped'});
+    r.headers = {'Content-Type':'application/fhir+json; charset=utf-8', ...r.headers};
+    return r;
+  }
+}
+
+/* ---------- search ---------- */
+function runSearch(url){
+  const note=[];
+  const u = new URL(url, 'http://local');
+  if(!/^\/fhir-r4\/v1\/Observation\/?$/.test(u.pathname)) return {status:404, body:oo([{msg:'Only Observation search is simulated here', oocode:'not-supported'}]), note:[]};
+  const p = u.searchParams;
+  let rows = Object.values(DB).filter(r=>r.resourceType==='Observation');
+  const total0 = rows.length;
+  const pat = p.get('patient')||p.get('subject');
+  if(pat){ const want = pat.includes('/')?pat:'Patient/'+pat; rows = rows.filter(r=>r.subject&&r.subject.reference===want); note.push(`patient=${pat} → reference match on Observation.subject`); }
+  if(p.get('encounter')){ const want = p.get('encounter').includes('/')?p.get('encounter'):'Encounter/'+p.get('encounter'); rows=rows.filter(r=>r.encounter&&r.encounter.reference===want); note.push('encounter → Observation.encounter'); }
+  if(p.get('category')){ const v=p.get('category'); rows=rows.filter(r=>(r.category||[]).some(cc=>(cc.coding||[]).some(x=>x.code===v||`${x.system}|${x.code}`===v))); note.push(`category=${v} → token match on Observation.category`); }
+  if(p.get('code')){ const v=p.get('code').split('|').pop(); rows=rows.filter(r=>(r.code.coding||[]).some(x=>x.code===v)); note.push(`code=${v} → token match on Observation.code ONLY (not component.code)`); }
+  if(p.get('combo-code')){ const v=p.get('combo-code').split('|').pop(); rows=rows.filter(r=>(r.code.coding||[]).some(x=>x.code===v)||(r.component||[]).some(cp=>(cp.code.coding||[]).some(x=>x.code===v))); note.push(`combo-code=${v} → Observation.code | Observation.component.code`); }
+  const unknown=[...p.keys()].filter(k=>!['patient','subject','encounter','category','code','combo-code','_count'].includes(k));
+  if(unknown.length) return {status:400, body:oo([{msg:`Unsupported search parameter(s): ${unknown.join(', ')} — server SHALL reject unknown params it cannot process`, oocode:'not-supported'}]), note};
+  const bundle={resourceType:'Bundle', type:'searchset', total:rows.length, link:[{relation:'self', url:url}], entry:rows.map(r=>({fullUrl:'http://localhost/fhir-r4/v1/Observation/'+r.id, resource:r, search:{mode:'match'}}))};
+  note.push(`${rows.length} of ${total0} stored Observations matched`);
+  return {status:200, body:bundle, note};
+}
+
+/* ---------- UI ---------- */
+const $ = s=>document.querySelector(s);
+const el = (tag,cls,html)=>{const e=document.createElement(tag); if(cls) e.className=cls; if(html!=null) e.innerHTML=html; return e;};
+const esc = s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const prefersReduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function renderPresets(){
+  const box=$('#presets'); box.innerHTML='';
+  for(const p of PRESETS){ const b=el('button', p.good?'':'bad', esc(p.label)); b.type='button'; b.dataset.id=p.id; b.addEventListener('click',()=>loadPreset(p.id)); box.appendChild(b); }
+}
+function loadPreset(id){
+  const p=PRESETS.find(x=>x.id===id);
+  $('#body').value = p.raw ?? JSON.stringify(p.make(),null,2);
+  document.querySelectorAll('#presets button').forEach(b=>b.classList.toggle('on', b.dataset.id===id));
+  updateFieldGuide();
+}
+function updateFieldGuide(){
+  const t=$('#fieldguide'); t.innerHTML='';
+  let o; try{ o=JSON.parse($('#body').value); $('#bodystat').textContent = `${$('#body').value.length} bytes · valid JSON`; }catch(e){ $('#bodystat').textContent='not valid JSON yet'; t.innerHTML='<tr><td colspan="3" class="muted">Body is not valid JSON — the guide reads the parsed object.</td></tr>'; return; }
+  if(!isObj(o)) return;
+  for(const k of Object.keys(o)){
+    const d=FIELD_DOC[k]; const tr=el('tr');
+    tr.appendChild(el('td',null,esc(k)));
+    tr.appendChild(el('td','card',esc(d?d[0]:'?')));
+    tr.appendChild(el('td',null, d? `${esc(d[1])} <span class="src muted mono" style="font-size:11px">${esc(d[2])}</span>` : '<span class="muted">Not a documented Observation element — R4 would reject unknown properties.</span>'));
+    t.appendChild(tr);
+  }
+}
+function renderStages(result){
+  const box=$('#stages'); box.innerHTML='';
+  STAGES.forEach((st,i)=>{
+    const s=el('div','stage'); s.id='stage-'+i;
+    s.innerHTML=`<div class="head"><div class="num">${st.n}</div><h3>${esc(st.title)}</h3></div><div class="analogy">${esc(st.analogy)}</div><ul class="checks"></ul>`;
+    box.appendChild(s);
+  });
+  if(!result) return;
+  const delay = prefersReduced ? 0 : 260;
+  result.stages.forEach((rs,i)=>{
+    setTimeout(()=>{
+      const s=$('#stage-'+i); const ul=s.querySelector('.checks');
+      document.querySelectorAll('.chain > div').forEach(d=>d.classList.toggle('lit', Number(d.dataset.stage)===i || (i>=1&&i<=2&&Number(d.dataset.stage)===1) || (i>=3&&i<=4&&Number(d.dataset.stage)===3)));
+      s.classList.add('active');
+      for(const c of rs.checks){
+        const li=el('li', c.ok ? (c.warn?'warn':'ok') : 'bad');
+        li.innerHTML=`<span class="m">${c.ok?(c.warn?'!':'✓'):'✗'}</span><span>${esc(c.msg)}${c.rule?` <span class="rule">· ${esc(c.rule)}</span>`:''}<span class="src">${esc(c.src)}</span></span>`;
+        ul.appendChild(li);
+      }
+      if(rs.state==='skipped'){ ul.appendChild(el('li','muted','<span class="m">–</span><span>not reached — the request was rejected earlier, so nothing here runs and nothing is written</span>')); }
+      setTimeout(()=>{ s.classList.remove('active'); s.classList.add(rs.state); if(i===5||rs.state==='failed'){ document.querySelectorAll('.chain > div').forEach(d=>d.classList.remove('lit')); if(rs.state==='done'&&i===5) document.querySelector('.chain > div[data-stage="5"]').classList.add('lit'); } }, delay*0.8);
+    }, i*delay);
+  });
+  setTimeout(()=>renderResponse(result), result.stages.filter(s=>s.state!=='skipped').length*delay);
+}
+function renderResponse(r){
+  const box=$('#response'); box.hidden=false;
+  const cls = r.status<300?'s2':'s4';
+  const text = {201:'201 Created',200:'200 OK',400:'400 Bad Request',401:'401 Unauthorized',405:'405 Method Not Allowed',415:'415 Unsupported Media Type',422:'422 Unprocessable Entity'}[r.status]||r.status;
+  $('#resp-status').innerHTML=`<span class="status ${cls}">HTTP ${esc(text)}</span><span class="hint">${r.status===201?'resource stored; note the Location header carries the new id and version':r.status===400?'structure / parse problem — R4 "400 parse/basic validation"':r.status===422?'well-formed but breaks profile or business rules — R4 "422 profile/business rules"':''}</span>`;
+  $('#resp-headers').textContent=Object.entries(r.headers).map(([k,v])=>`${k}: ${v}`).join('\n');
+  $('#resp-body').textContent=JSON.stringify(r.body,null,2);
+  renderStore(); renderReadout();
+  box.scrollIntoView({behavior: prefersReduced?'auto':'smooth', block:'nearest'});
+}
+function renderStore(){
+  const t=$('#store'); t.innerHTML='<tr><th>type</th><th>id</th><th>summary</th></tr>';
+  for(const [key,r] of Object.entries(DB)){
+    const tr=el('tr', created.has(key)?'new':'');
+    const sum = r.resourceType==='Observation' ? obsSummary(r) : (r.name?.[0]?.text || r.name || r.deviceName?.[0]?.name || (r.status+' '+(r.class?.code||'')));
+    tr.innerHTML=`<td>${esc(r.resourceType)}</td><td class="mono"><button class="link" type="button" data-key="${esc(key)}">${esc(r.id.length>18?r.id.slice(0,8)+'…':r.id)}</button></td><td>${esc(sum)}</td>`;
+    tr.querySelector('button').addEventListener('click',()=>openDialog(`<div class="eyebrow">${esc(key)}</div><pre style="margin-top:8px;max-height:60vh;overflow:auto">${esc(JSON.stringify(r,null,2))}</pre>`));
+    t.appendChild(tr);
+  }
+}
+function obsSummary(r){
+  const code=r.code?.coding?.[0]?.code; const k=VITALS[code]; const name=k?k.name:code;
+  if(r.component) return `${name}: ${r.component.map(c=>`${c.valueQuantity?.value??'—'} ${c.valueQuantity?.code??''}`).join(' / ')}`;
+  return `${name}: ${r.valueQuantity?.value??'—'} ${r.valueQuantity?.code??''}`;
+}
+function renderReadout(){
+  const box=$('#readout'); box.innerHTML='';
+  const rows=Object.values(DB).filter(r=>r.resourceType==='Observation'&&r.subject?.reference==='Patient/'+PAT_ID).sort((a,b)=>(a.effectiveDateTime||'').localeCompare(b.effectiveDateTime||''));
+  if(!rows.length){ box.innerHTML='<p class="hint">No readings yet for Budi Santoso. POST one on the left.</p>'; return; }
+  for(const r of rows){
+    const code=r.code?.coding?.[0]?.code; const k=VITALS[code];
+    const d=el('div','vital');
+    const val = r.component ? r.component.map(c=>c.valueQuantity?.value??'—').join(' / ') + ' ' + (r.component[0]?.valueQuantity?.unit||'') : `${r.valueQuantity?.value??'—'} ${r.valueQuantity?.unit||r.valueQuantity?.code||''}`;
+    d.innerHTML=`<span class="n">${esc(k?k.name.split(' (')[0]:code)}</span><span class="v">${esc(val)}</span><span class="t">${esc(r.effectiveDateTime||'')} · ${esc(r.status)} · via ${esc(r.device?.reference||'—')}</span>`;
+    box.appendChild(d);
+  }
+}
+function doQuery(){
+  const url=$('#q').value.trim(); const r=runSearch(url);
+  $('#qnote').textContent = r.note.join(' · ');
+  $('#qresult').textContent = `HTTP ${r.status}\nContent-Type: application/fhir+json\n\n` + JSON.stringify(r.body,null,2);
+}
+function openDialog(html){ $('#dlg-body').innerHTML=html; $('#dlg').showModal(); }
+
+/* glossary */
+function glossaryHtml(){
+  return `<h2>Glossary</h2><dl style="margin:0;display:grid;gap:10px">` + Object.values(GLOSSARY).map(([t,d,s])=>`<div><dt style="font-weight:600">${esc(t)}</dt><dd style="margin:2px 0 0;font-size:13px">${esc(d)}<div class="src">${esc(s)}</div></dd></div>`).join('') + `</dl>`;
+}
+
+/* wiring */
+renderPresets(); loadPreset('hr'); renderStages(null); renderStore(); renderReadout();
+$('#body').addEventListener('input',()=>{ document.querySelectorAll('#presets button').forEach(b=>b.classList.remove('on')); updateFieldGuide(); });
+$('#btn-format').addEventListener('click',()=>{ try{ $('#body').value=JSON.stringify(JSON.parse($('#body').value),null,2); updateFieldGuide(); }catch(e){ $('#bodystat').textContent='cannot format: '+e.message; } });
+$('#btn-send').addEventListener('click',()=>{
+  const req={method:$('#method').value, url:$('#url').value.trim(), auth:$('#auth').value, ctype:$('#ctype').value, body:$('#body').value};
+  $('#response').hidden=true;
+  renderStages(runPipeline(req));
+});
+$('#btn-query').addEventListener('click',doQuery);
+$('#btn-q1').addEventListener('click',()=>{ $('#q').value=`/fhir-r4/v1/Observation?patient=${PAT_ID}&code=8867-4`; doQuery(); });
+$('#btn-q2').addEventListener('click',()=>{ $('#q').value=`/fhir-r4/v1/Observation?patient=${PAT_ID}&code=8480-6`; doQuery(); });
+$('#btn-q3').addEventListener('click',()=>{ $('#q').value=`/fhir-r4/v1/Observation?patient=${PAT_ID}&combo-code=8480-6`; doQuery(); });
+$('#q').addEventListener('keydown',e=>{ if(e.key==='Enter') doQuery(); });
+$('#btn-glossary').addEventListener('click',()=>openDialog(glossaryHtml()));
+$('#dlg-close').addEventListener('click',()=>$('#dlg').close());
+$('#btn-reset').addEventListener('click',()=>{ DB=seed(); created=new Set(); renderStore(); renderReadout(); $('#qresult').textContent='— run a search —'; $('#qnote').textContent=''; $('#response').hidden=true; renderStages(null); });
+</script>
