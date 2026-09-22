@@ -25,7 +25,7 @@ monitoring dashboard are out of scope.
 
 - **Sub-project 1 — reference compilation: DONE** (merged to `master`).
 - **Sub-project 2 — the server: NOT STARTED.** Its brainstorm was opened and
-  interrupted; nothing is designed yet. Start with `superpowers:brainstorming`.
+  interrupted; nothing is designed yet. Start with `.superpowers:brainstorming`.
 
 ## What is already here
 
@@ -34,8 +34,8 @@ docs/reference/
 ├── raw/       93 scraped pages + FETCH-LOG.md   — primary evidence, never hand-edit
 ├── claude/    31 dense files + INDEX.md         — what YOU load; facts live here
 └── human/     13 prose guides + README.md       — for the project owner
-tools/scrape/  scraper, staleness check, view linter, site builder, 34 tests
-docs/superpowers/{specs,plans}/                  — spec + implementation plan of sub-project 1
+.tools/scrape/  scraper, staleness check, view linter, site builder, 34 tests
+docs/.superpowers/{specs,plans}/                  — spec + implementation plan of sub-project 1
 ```
 
 **Start at `docs/reference/claude/INDEX.md`.** Every line says what a file covers
@@ -80,17 +80,17 @@ enforces a rule. The ones that change design decisions:
 
 ## How work is done here
 
-**Process is not optional.** The `superpowers` skills drive it:
+**Process is not optional.** The `.superpowers` skills drive it:
 
 - Any creative work — a feature, a component, a behaviour change — starts with
-  `superpowers:brainstorming`. Architectural work then goes
-  brainstorm → spec (`docs/superpowers/specs/`) → `superpowers:writing-plans` →
-  `superpowers:subagent-driven-development`.
-- Bugs start with `superpowers:systematic-debugging`. Implementation is TDD
-  (`superpowers:test-driven-development`): failing test, watch it fail, minimal
+  `.superpowers:brainstorming`. Architectural work then goes
+  brainstorm → spec (`docs/.superpowers/specs/`) → `.superpowers:writing-plans` →
+  `.superpowers:subagent-driven-development`.
+- Bugs start with `.superpowers:systematic-debugging`. Implementation is TDD
+  (`.superpowers:test-driven-development`): failing test, watch it fail, minimal
   code, watch it pass, commit.
 - Never claim something works without running it
-  (`superpowers:verification-before-completion`).
+  (`.superpowers:verification-before-completion`).
 
 **Execution techniques that worked in sub-project 1** — reuse them:
 
@@ -112,10 +112,10 @@ enforces a rule. The ones that change design decisions:
 ## Commands
 
 ```bash
-python3 -m pytest tools/scrape/tests -q     # 34 tests
-python3 tools/scrape/lint_views.py          # reference-view consistency; must print "0 problem(s)"
-python3 tools/scrape/check.py               # re-fetch both sites, detect upstream drift (~3 min, network)
-python3 tools/scrape/scrape.py --only <id>  # re-fetch one page from tools/scrape/sources.yaml
+python3 -m pytest .tools/scrape/tests -q     # 34 tests
+python3 .tools/scrape/lint_views.py          # reference-view consistency; must print "0 problem(s)"
+python3 .tools/scrape/check.py               # re-fetch both sites, detect upstream drift (~3 min, network)
+python3 .tools/scrape/scrape.py --only <id>  # re-fetch one page from .tools/scrape/sources.yaml
 ```
 
 `check.py` exits 0 when everything still matches. `res-device` and
@@ -133,5 +133,5 @@ then re-check the `claude/` file built from it.
 - Commit messages end with the attribution lines the session gives you.
 - The human view is published at
   https://claude.ai/code/artifact/cc73fa7d-27a7-4454-bf84-8b20f8a0f843 — rebuild
-  with `python3 tools/scrape/build_human_site.py <out.html>` and republish to the
+  with `python3 .tools/scrape/build_human_site.py <out.html>` and republish to the
   same URL if `docs/reference/human/` changes.
