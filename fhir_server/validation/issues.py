@@ -1,0 +1,27 @@
+from dataclasses import dataclass
+
+R_CODE_NOT_FOUND = 10001
+R_BAD_CODING_SYSTEM = 10002
+R_BAD_IDENTIFIER_SYSTEM = 10117
+R_MISSING_REFERENCE = 10124
+R_DATETIME = 10132
+R_EMPTY_TEXT = 10134
+R_INT_AS_STRING = 10254
+R_WAJIB_MISSING = 10263
+L_EARLIEST_DATE = 20001
+L_UNRESOLVABLE_REFERENCE = 20002
+L_LOCATION_POSITION = 20003
+L_PATIENT_IDENTITY = 20004
+L_DEVICE_RULE = 20005
+L_OBSERVATION_VALUE = 20006
+L_AUTH = 20007
+L_SEARCH_PARAM = 20008
+
+
+@dataclass
+class Issue:
+    code: str
+    details_text: str
+    severity: str = "error"
+    expression: str | None = None
+    rule_number: int | None = None
