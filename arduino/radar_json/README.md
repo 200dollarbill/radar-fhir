@@ -30,3 +30,25 @@ arduino-cli upload -p <serial-port> --fqbn m5stack:esp32:m5stack_cores3 arduino/
 ```
 
 Do not upload until GPIO 1 and GPIO 2 are confirmed against the AFE wiring.
+
+## WiFi heart-rate ingest (config.h)
+
+The sketch can POST heart-rate Observations to the local FHIR server over WiFi,
+using the wire contract of `device_client/client.py` (same JSON, same endpoint,
+same `Authorization: Bearer` header).
+
+1. `cp arduino/radar_json/config.example.h arduino/radar_json/config.h` and fill
+   in WiFi credentials and `SERVER_URL` (the machine running `python3 -m fhir_server serve`).
+2. Obtain `DEVICE_TOKEN` from `python3 -m fhir_server seed` (its summary JSON) or
+   `POST /fhir-r4/v1/Device/{id}/$provision` as an admin; `DEVICE_REF` and
+   `PATIENT_REF` come from the same seed summary.
+3. Set `ENCOUNTER_REF` to the encounter the doctor opened
+   (`POST /fhir-r4/v1/Encounter` as the doctor, use the returned id).
+4. `config.h` is gitignored — never commit real credentials.
+
+`config.h` is compile-time: an empty `DEVICE_TOKEN` or `ENCOUNTER_REF` disables
+ingest entirely and the sketch runs as the serial-only dummy.
+
+**Standing rule: do not upload** until GPIO 1/2 are confirmed against the AFE
+wiring (see Assumptions). The ingest path is compile-verified only; WiFi, NTP
+and the POST itself require a connected board and a running server.

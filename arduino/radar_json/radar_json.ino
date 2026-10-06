@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <M5Unified.h>
+#include "ingest.h"
 
 // Placeholder pins. Confirm the AFE wiring before connecting the radar.
 constexpr int RADAR_I_PIN = 1;
@@ -74,6 +75,10 @@ void setup() {
   Serial.printf("READY radar_json i_pin=%d q_pin=%d fs=%lu imu_ok=%s\n",
                 RADAR_I_PIN, RADAR_Q_PIN, static_cast<unsigned long>(SAMPLE_RATE_HZ),
                 imuOk ? "true" : "false");
+  if (ingestConfigured()) {
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    configTime(0, 0, "pool.ntp.org");  // UTC for effectiveDateTime
+  }
   drawStatus(imuOk ? "ONLINE" : "ERROR");
 }
 
@@ -86,6 +91,14 @@ void loop() {
     }
     nextSampleUs += SAMPLE_PERIOD_US;
     emitSample();
+  }
+  static uint32_t lastIngest = 0;
+  if (ingestConfigured() && WiFi.status() == WL_CONNECTED
+      && millis() - lastIngest >= INGEST_PERIOD_MS) {
+    lastIngest = millis();
+    float placeholderHr = 72.0f;  // placeholder until radar pipeline exists
+    int code = postHeartRate(placeholderHr);
+    Serial.printf("ingest POST -> %d\n", code);
   }
   const char* state = !imuOk ? "ERROR" : (millis() - lastSentMs > IDLE_TIMEOUT_MS ? "IDLE" : "SENDING");
   drawStatus(state);
