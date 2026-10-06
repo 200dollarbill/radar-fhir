@@ -29,6 +29,12 @@ def put(conn, type_, id_, doc) -> int:
     return version
 
 
+def get_version(conn, type_, id_):
+    row = conn.execute("SELECT version FROM resources WHERE type=? AND id=?",
+                       (type_, id_)).fetchone()
+    return row["version"] if row else None
+
+
 def delete(conn, type_, id_) -> bool:
     cur = conn.execute("DELETE FROM resources WHERE type=? AND id=?", (type_, id_))
     conn.commit()

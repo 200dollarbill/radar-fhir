@@ -17,7 +17,10 @@ CREATE TABLE IF NOT EXISTS device_tokens (
 
 
 def connect(db_path: str) -> sqlite3.Connection:
-    conn = sqlite3.connect(db_path)
+    # One shared connection for the app's single event loop; FastAPI serves
+    # routes on a different thread than create_app ran on, so pinning to the
+    # creating thread would raise ProgrammingError.
+    conn = sqlite3.connect(db_path, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
