@@ -179,3 +179,142 @@ class FhirService:
         token = secrets.token_urlsafe(32)
         devices_repo.create_token(self.conn, device_id, patient_ref, token)
         return token
+
+
+SUPPORTED_PARAMS = {
+    "Patient": {"identifier", "name", "birthdate", "gender", "id"},
+    "Practitioner": {"identifier", "name", "id"},
+    "Organization": {"name", "id"},
+    "Location": {"name", "organization", "id"},
+    "Encounter": {"subject", "patient", "status", "participant", "id"},
+    "Observation": {"subject", "encounter", "code", "date", "id"},
+    "Device": {"identifier", "patient", "id"},
+}
+
+
+class _BadParam(Exception):
+    pass
+
+
+def _matches_identifier(doc, value):
+    want_system, _, want_value = str(value).partition("|")
+    for ident in doc.get("identifier") or []:
+        if want_value and ident.get("value") != want_value:
+            continue
+        if want_system and ident.get("system") != want_system:
+            continue
+        if want_value or want_system:
+            return True
+    return False
+
+
+def _matches_name(doc, needle):
+    needle = needle.lower()
+    for n in doc.get("name") or []:
+        fields = [n.get("text"), n.get("family")] + list(n.get("given") or [])
+        if any(f and needle in f.lower() for f in fields):
+            return True
+    return False
+
+
+def _search_impl(self, principal, resource_type, params):
+    from ..validation.issues import L_SEARCH_PARAM
+
+    def bad_param(message, expr):
+        return FhirError([Issue(code="value", details_text=message,
+                                expression=expr,
+                                rule_number=L_SEARCH_PARAM)], 400)
+
+    supported = SUPPORTED_PARAMS.get(resource_type)
+    if supported is None:
+        raise FhirError([Issue(code="not-found",
+                               details_text=f"Unsupported resource type"
+                                            f" {resource_type}")], 404)
+    unknown = [k for k in params if k not in supported and k != "_count"]
+    if unknown:
+        raise bad_param(f"Unknown search parameter: {unknown[0]}",
+                        f"{resource_type}.{unknown[0]}")
+    if "name" in params and len(params["name"]) < 3:
+        raise bad_param("name needs >= 3 characters", f"{resource_type}.name")
+    try:
+        effective = authz.filter_search(principal, resource_type, params,
+                                        self.conn)
+    except AuthzError as exc:
+        raise _as_fhir_error(exc) from exc
+    marker = effective.pop("_scope_participant", None)
+    docs = res.list(self.conn, resource_type)
+    try:
+        matched = [d for d in docs
+                   if all(self._param_match(resource_type, d, k, v)
+                          for k, v in effective.items())]
+    except _BadParam as exc:
+        raise bad_param(str(exc), resource_type) from exc
+    if marker:
+        if resource_type == "Encounter":
+            matched = [d for d in matched
+                       if authz.doctor_reads_encounter(d, principal)]
+        elif resource_type == "Observation":
+            matched = [d for d in matched
+                       if authz.doctor_reads_observation(self.conn, principal, d)]
+        elif resource_type == "Patient":
+            matched = [d for d in matched
+                       if authz.participates_in_patient(
+                           self.conn, principal.ref, d.get("id"))]
+    try:
+        count = int(effective.get("_count", 50))
+    except (TypeError, ValueError):
+        raise bad_param("_count must be an integer", f"{resource_type}._count")
+    count = max(0, min(count, 100))
+    bundle = {"resourceType": "Bundle", "type": "searchset",
+              "total": len(matched)}
+    if matched:
+        bundle["entry"] = [{"resource": d} for d in matched[:count]]
+    return bundle
+
+
+def _param_match(self, resource_type, doc, key, value):
+    if key == "_count":
+        return True
+    if key == "id":
+        return doc.get("id") == value
+    if key in ("subject", "patient"):
+        if resource_type == "Device":
+            return (doc.get("patient") or {}).get("reference") == value
+        return (doc.get("subject") or {}).get("reference") == value
+    if key == "identifier":
+        return _matches_identifier(doc, value)
+    if key == "name":
+        return _matches_name(doc, value)
+    if key == "gender":
+        return doc.get("gender") == value
+    if key == "birthdate":
+        return doc.get("birthDate") == value
+    if key == "status":
+        return doc.get("status") == value
+    if key == "code":
+        want_system, _, want_code = str(value).partition("|")
+        codings = (doc.get("code") or {}).get("coding") or []
+        return any((not want_system or c.get("system") == want_system)
+                   and c.get("code") == want_code for c in codings)
+    if key == "encounter":
+        return (doc.get("encounter") or {}).get("reference") == value
+    if key == "participant":
+        return any((p.get("individual") or {}).get("reference") == value
+                   for p in doc.get("participant") or [])
+    if key == "date":
+        eff = doc.get("effectiveDateTime")
+        if not eff:
+            return False
+        if "/" in value:
+            start, _, end = value.partition("/")
+            return start <= eff <= end
+        return eff[:len(value)] == value
+    if key == "organization":
+        if resource_type == "Location":
+            return (doc.get("managingOrganization") or {}).get("reference") == value
+        return False
+    raise _BadParam(f"Unsupported search parameter: {key}")
+
+
+FhirService.search = _search_impl
+FhirService._param_match = _param_match

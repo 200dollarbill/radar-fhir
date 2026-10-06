@@ -135,7 +135,10 @@ def filter_search(principal, resource_type, params, conn) -> dict:
         return params
     if principal.kind == "doctor":
         if resource_type == "Patient":
-            return params  # post-filter by participation in the service
+            # post-filter by participation in the service (marker keyed
+            # to the search post-filter, see FhirService.search)
+            params["_scope_participant"] = principal.ref
+            return params
         if resource_type in ("Encounter", "Observation"):
             subject = params.get("subject") or params.get("patient")
             if subject:
