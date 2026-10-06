@@ -5,13 +5,13 @@ import re
 import typing
 
 import pydantic
-from fhir.resources.device import Device
-from fhir.resources.encounter import Encounter
-from fhir.resources.location import Location
-from fhir.resources.observation import Observation
-from fhir.resources.organization import Organization
-from fhir.resources.patient import Patient
-from fhir.resources.practitioner import Practitioner
+from fhir.resources.R4B.device import Device
+from fhir.resources.R4B.encounter import Encounter
+from fhir.resources.R4B.location import Location
+from fhir.resources.R4B.observation import Observation
+from fhir.resources.R4B.organization import Organization
+from fhir.resources.R4B.patient import Patient
+from fhir.resources.R4B.practitioner import Practitioner
 
 from .issues import Issue, R_DATETIME
 
@@ -112,11 +112,15 @@ def _strict_check(model_cls, payload, path, issues, *, root=False):
                             expression=path))
         return False
     fields = model_cls.model_fields
+    alias_to_name = {f.alias: n for n, f in fields.items() if f.alias}
     ok = True
     for key, value in payload.items():
         if key == "resourceType":
             continue
-        if key not in fields:
+        if key.startswith("_"):
+            continue  # primitive-extension companion key; pydantic handles it
+        real = key if key in fields else alias_to_name.get(key)
+        if real is None:
             if root:
                 issues.append(Issue(code="value",
                                     details_text=f"Unknown element: {key}",
@@ -126,7 +130,7 @@ def _strict_check(model_cls, payload, path, issues, *, root=False):
             # leave them to pydantic (extension containers allow extras).
             continue
         child = f"{path}.{key}"
-        kind, target = _unwrap(fields[key].annotation)
+        kind, target = _unwrap(fields[real].annotation)
         if kind == "list":
             if not isinstance(value, list):
                 issues.append(Issue(code="format", details_text="Expected array",
