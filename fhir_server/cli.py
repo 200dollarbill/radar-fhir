@@ -123,6 +123,15 @@ def cmd_seed(args):
     }))
 
 
+def cmd_serve(args):
+    import uvicorn
+
+    from .app import create_app
+    from .config import Settings
+    uvicorn.run(create_app(Settings.from_env(db_path=args.db)),
+                host="127.0.0.1", port=args.port)
+
+
 def main(argv=None):
     _load_dotenv()
     _ensure_secret()
@@ -134,6 +143,9 @@ def main(argv=None):
     seed = sub.add_parser("seed")
     seed.add_argument("--reset", action="store_true")
     seed.set_defaults(fn=cmd_seed)
+    serve = sub.add_parser("serve")
+    serve.add_argument("--port", type=int, default=8000)
+    serve.set_defaults(fn=cmd_serve)
     args = parser.parse_args(argv)
     args.fn(args)
 

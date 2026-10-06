@@ -5,3 +5,4 @@ __pycache__/
 .tools/
 PraTAVENV/
 arduino/radar_json/config.h
+tools/

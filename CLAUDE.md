@@ -24,8 +24,15 @@ monitoring dashboard are out of scope.
 ## Status
 
 - **Sub-project 1 — reference compilation: DONE** (merged to `master`).
-- **Sub-project 2 — the server: NOT STARTED.** Its brainstorm was opened and
-  interrupted; nothing is designed yet. Start with `.superpowers:brainstorming`.
+- **Sub-project 2 — the server: walking skeleton IMPLEMENTED.** Spec:
+  `docs/.superpowers/specs/2026-09-29-fhir-r4-server-walking-skeleton-design.md`;
+  plan: `docs/.superpowers/plans/2026-09-29-fhir-r4-server-walking-skeleton.md`.
+  Proves admin-provision → doctor-opened Encounter → device heart-rate
+  Observation → doctor read → patient own-record, with local JWT roles,
+  device tokens, SATUSEHAT-shaped OperationOutcome validation, and a
+  compile-gated firmware ingest. Remaining sub-projects are the spec's
+  roadmap section (web UI, Encounter/Condition/Procedure breadth, profile
+  authoring, Bundle/PATCH, org hierarchy, radar-derived vitals, worklist ack).
 
 ## What is already here
 
