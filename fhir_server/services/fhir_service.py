@@ -21,6 +21,21 @@ def _as_fhir_error(exc: AuthzError) -> FhirError:
     return FhirError(exc.issues, exc.status)
 
 
+def _ensure_participant(doc, principal):
+    """D10: a doctor creating/updating an Encounter is a participant of it,
+    so their read access derives from the resource itself."""
+    if principal.kind != "doctor" or not principal.ref:
+        return doc
+    participants = list(doc.get("participant") or [])
+    if any((p.get("individual") or {}).get("reference") == principal.ref
+           for p in participants):
+        return doc
+    participants.append({"individual": {"reference": principal.ref}})
+    doc = dict(doc)
+    doc["participant"] = participants
+    return doc
+
+
 class FhirService:
     def __init__(self, conn, settings):
         self.conn = conn
@@ -122,6 +137,8 @@ class FhirService:
             raise _as_fhir_error(exc) from exc
         doc = self._validated(principal, resource_type, payload)
         new_id, doc = self._mint(resource_type, doc, self.org_id)
+        if resource_type == "Encounter":
+            doc = _ensure_participant(doc, principal)
         res.put(self.conn, resource_type, new_id, doc)
         return new_id, res.get(self.conn, resource_type, new_id), 1
 
@@ -151,6 +168,8 @@ class FhirService:
         doc = self._validated(principal, resource_type, payload, existing=existing)
         doc = dict(doc)
         doc["id"] = id_
+        if resource_type == "Encounter":
+            doc = _ensure_participant(doc, principal)
         version = res.put(self.conn, resource_type, id_, doc)
         return id_, res.get(self.conn, resource_type, id_), version
 
