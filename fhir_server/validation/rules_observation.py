@@ -8,7 +8,8 @@ def _wajib(text, expr):
                  expression=expr, rule_number=R_WAJIB_MISSING)
 
 
-def validate_observation(payload, *, org_id, device_ref, assigned_patient):
+def validate_observation(payload, *, org_id, device_ref, assigned_patient,
+                         encounter_getter=None):
     out = []
     if not payload.get("status"):
         out.append(_wajib("Observation.status", "Observation.status"))
@@ -68,6 +69,25 @@ def validate_observation(payload, *, org_id, device_ref, assigned_patient):
         out.append(Issue(code="value",
                          details_text=f"Device assigned to {assigned_patient}, not {subj}",
                          expression="Observation.subject", rule_number=L_DEVICE_RULE))
+    enc_ref = (payload.get("encounter") or {}).get("reference")
+    if (assigned_patient is not None and enc_ref and encounter_getter is not None):
+        enc = encounter_getter(enc_ref)
+        if enc is not None:
+            if enc.get("status") != "in-progress":
+                out.append(Issue(
+                    code="value",
+                    details_text="Device may only write into an in-progress"
+                                 f" Encounter (status={enc.get('status')})",
+                    expression="Observation.encounter",
+                    rule_number=L_DEVICE_RULE))
+            enc_subj = (enc.get("subject") or {}).get("reference")
+            if enc_subj != assigned_patient:
+                out.append(Issue(
+                    code="value",
+                    details_text="Encounter subject does not match the device"
+                                 f" assignment ({assigned_patient})",
+                    expression="Observation.encounter",
+                    rule_number=L_DEVICE_RULE))
     for idx, ident in enumerate(payload.get("identifier") or []):
         system = ident.get("system")
         allowed = {f"http://sys-ids.kemkes.go.id/observation/{org_id}",

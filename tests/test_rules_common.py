@@ -12,9 +12,26 @@ def test_datetime_accepts_offset():
                               "Observation", "2014-06-03") == []
 
 
-def test_date_before_floor_rejected():
-    i = rc.check_datetimes({"birthDate": "2010-01-01"}, "Patient", "2014-06-03")
+def test_event_date_before_floor_rejected():
+    # the S4 floor targets record event dates (period.start, effective[x])
+    i = rc.check_datetimes({"period": {"start": "2010-01-01"}}, "Encounter",
+                           "2014-06-03")
     assert any(x.rule_number == 20001 for x in i)
+
+
+def test_birthdate_exempt_from_floor():
+    # final review issue 11: demographic dates predate the floor
+    assert rc.check_datetimes({"birthDate": "1990-02-14"}, "Patient",
+                              "2014-06-03") == []
+    # but a future birthDate is still impossible
+    assert rc.check_datetimes({"birthDate": "2030-01-01"}, "Patient",
+                              "2014-06-03")
+
+
+def test_future_date_only_rejected():
+    assert any(x.rule_number == 10132 for x in
+               rc.check_datetimes({"birthDate": "2030-01-01"}, "Patient",
+                                  "2014-06-03"))
 
 
 def test_future_date_rejected_but_period_end_allowed():

@@ -31,6 +31,24 @@ def _is_model(annotation) -> bool:
             and issubclass(annotation, pydantic.BaseModel))
 
 
+def _as_model(annotation):
+    """Return the pydantic model for a field annotation, resolving the lazy
+    abc.*Type proxies fhir.resources uses for nested elements
+    (e.g. abc.QuantityType -> Quantity). None when not a model at all."""
+    if annotation is None:
+        return None
+    if _is_model(annotation):
+        return annotation
+    getter = getattr(annotation, "get_model_klass", None)
+    if getter is None:
+        return None
+    try:
+        klass = getter()
+    except Exception:
+        return None
+    return klass if _is_model(klass) else None
+
+
 def _unwrap(annotation):
     """Classify a field annotation: ('model', cls), ('list', item),
     ('opt', inner) or ('primitive', annotation)."""
@@ -42,8 +60,9 @@ def _unwrap(annotation):
         return ("list", typing.get_args(annotation)[0])
     if origin is not None:
         return ("any", annotation)
-    if _is_model(annotation):
-        return ("model", annotation)
+    resolved = _as_model(annotation)
+    if resolved is not None:
+        return ("model", resolved)
     return ("primitive", annotation)
 
 
@@ -132,6 +151,7 @@ def _strict_check(model_cls, payload, path, issues, *, root=False):
         child = f"{path}.{key}"
         kind, target = _unwrap(fields[real].annotation)
         if kind == "list":
+            target = _as_model(target) or target
             if not isinstance(value, list):
                 issues.append(Issue(code="format", details_text="Expected array",
                                     expression=child))
@@ -158,7 +178,8 @@ def _strict_check(model_cls, payload, path, issues, *, root=False):
                                     expression=child))
                 ok = False
             elif isinstance(value, dict):
-                model_targets = [a for a in target if _is_model(a)]
+                model_targets = [m for m in (_as_model(a) for a in target)
+                                 if m is not None]
                 if model_targets and not _strict_check(
                         model_targets[0], value, child, issues):
                     ok = False

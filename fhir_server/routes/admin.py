@@ -1,9 +1,12 @@
+import sqlite3
+
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from ..auth.passwords import hash_password
 from ..authz import AuthzError
 from ..repositories import accounts
+from ..repositories import resources as res
 from ..services.fhir_service import FhirError
 from ..validation.issues import Issue
 from ..validation.outcome import to_outcome
@@ -23,7 +26,14 @@ async def create_account(request: Request):
         principal = get_principal(request)
         if principal.kind != "admin":
             raise AuthzError("Only admins may manage accounts")
-        body = await request.json()
+        try:
+            body = await request.json()
+        except Exception:
+            raise FhirError([Issue(code="format",
+                                   details_text="Body must be valid JSON")], 400)
+        if not isinstance(body, dict):
+            raise FhirError([Issue(code="format",
+                                   details_text="Body must be a JSON object")], 400)
         username, password = body.get("username"), body.get("password")
         role, ref = body.get("role"), body.get("ref")
         if not username or not password or role not in ("admin", "doctor",
@@ -32,8 +42,30 @@ async def create_account(request: Request):
                                    details_text="username, password, role"
                                                 " (admin|doctor|patient)"
                                                 " required")], 400)
-        accounts.create(request.app.state.conn, username,
-                        hash_password(password), role, ref)
+        if ref is not None:
+            if "/" not in str(ref):
+                raise FhirError([Issue(code="value",
+                                       details_text="ref must be Type/id")], 400)
+            rtype, _, rid = str(ref).partition("/")
+            if not res.exists(request.app.state.conn, rtype, rid):
+                raise FhirError([Issue(
+                    code="value",
+                    details_text=f"Unresolvable reference: {ref}",
+                    expression="Account.ref",
+                    rule_number=20002)], 400)
+        if accounts.get_by_username(request.app.state.conn, username):
+            raise FhirError([Issue(
+                code="duplicate",
+                details_text=f"Found duplicate resource: Account {username}")],
+                409)
+        try:
+            accounts.create(request.app.state.conn, username,
+                            hash_password(password), role, ref)
+        except sqlite3.IntegrityError:
+            raise FhirError([Issue(
+                code="duplicate",
+                details_text=f"Found duplicate resource: Account {username}")],
+                409) from None
         return JSONResponse(status_code=201, content={"created": username},
                             media_type="application/fhir+json")
     except (FhirError, AuthzError) as exc:

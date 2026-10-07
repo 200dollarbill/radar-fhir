@@ -101,3 +101,25 @@ def test_participates_helper(db_path):
     assert participates_in_patient(conn, "Practitioner/N12345678", "P11111111111")
     assert not participates_in_patient(conn, "Practitioner/N99999999",
                                        "P11111111111")
+
+
+def test_doctor_read_encounter_requires_participation(db_path):
+    conn = make_conn(db_path)
+    resources.put(conn, "Encounter", "e-foreign", {
+        "resourceType": "Encounter", "id": "e-foreign", "status": "arrived",
+        "subject": {"reference": "Patient/P11111111111"},
+        "participant": [{"individual": {"reference": "Practitioner/N99999999"}}]})
+    check(DOC, "read", "Encounter",
+          resources.get(conn, "Encounter", "e1"), conn=conn)
+    with pytest.raises(AuthzError):
+        check(DOC, "read", "Encounter",
+              resources.get(conn, "Encounter", "e-foreign"), conn=conn)
+
+
+def test_patient_account_without_subject_ref_is_denied_search(db_path):
+    conn = make_conn(db_path)
+    NOREF = Principal(kind="patient", role="patient", ref=None)
+    with pytest.raises(AuthzError):
+        filter_search(NOREF, "Patient", {}, conn)
+    with pytest.raises(AuthzError):
+        filter_search(NOREF, "Observation", {}, conn)

@@ -96,6 +96,9 @@ def test_device_provision_and_use(client):
 
 def test_account_admin_flow(client):
     tok = admin_token(client)
+    # the Practitioner resource must exist before an account can reference it
+    resources.put(client.app.state.conn, "Practitioner", "N12345678",
+                  {"resourceType": "Practitioner", "id": "N12345678"})
     r = client.post("/fhir-r4/v1/admin/accounts", headers=hdr(tok),
                     json={"username": "doc1", "password": "pw",
                           "role": "doctor", "ref": "Practitioner/N12345678"})
@@ -107,3 +110,45 @@ def test_account_admin_flow(client):
                      json={"username": "x", "password": "y",
                            "role": "admin", "ref": None})
     assert r3.status_code == 403
+
+
+def test_auth_non_dict_body_is_not_500(client):
+    r = client.post("/auth/token", json=[1, 2, 3])
+    assert r.status_code == 401
+    assert r.json()["resourceType"] == "OperationOutcome"
+
+
+def test_admin_accounts_non_dict_body_400(client):
+    tok = admin_token(client)
+    r = client.post("/fhir-r4/v1/admin/accounts", headers=hdr(tok),
+                    json=["not", "a", "dict"])
+    assert r.status_code == 400
+    assert r.json()["resourceType"] == "OperationOutcome"
+
+
+def test_duplicate_account_409(client):
+    tok = admin_token(client)
+    payload = {"username": "dup", "password": "pw", "role": "doctor",
+               "ref": None}
+    assert client.post("/fhir-r4/v1/admin/accounts",
+                       headers=hdr(tok), json=payload).status_code == 201
+    r = client.post("/fhir-r4/v1/admin/accounts", headers=hdr(tok),
+                    json=payload)
+    assert r.status_code == 409
+    assert r.json()["resourceType"] == "OperationOutcome"
+
+
+def test_delete_honours_accept_406(client):
+    tok = admin_token(client)
+    r = client.delete("/fhir-r4/v1/Patient/nope",
+                      headers={**hdr(tok), "Accept": "application/xml"})
+    assert r.status_code == 406
+
+
+def test_account_ref_must_exist(client):
+    tok = admin_token(client)
+    r = client.post("/fhir-r4/v1/admin/accounts", headers=hdr(tok),
+                    json={"username": "doc-bad", "password": "pw",
+                          "role": "doctor", "ref": "Practitioner/NOPE"})
+    assert r.status_code == 400
+    assert r.json()["resourceType"] == "OperationOutcome"

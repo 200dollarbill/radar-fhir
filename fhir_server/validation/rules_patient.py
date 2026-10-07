@@ -13,7 +13,7 @@ def _issue(text, rule, expr="Patient"):
                  rule_number=rule)
 
 
-def validate_patient(payload, *, is_create: bool):
+def validate_patient(payload, *, is_create: bool, nik_exists_fn=None):
     out = []
     identifiers = payload.get("identifier") or []
     nik = [i for i in identifiers if i.get("system") == NIK_SYSTEM]
@@ -29,6 +29,11 @@ def validate_patient(payload, *, is_create: bool):
         if not (value.isdigit() and len(value) == 16):
             out.append(_issue(f"NIK must be 16 digits, got '{value}'",
                               L_PATIENT_IDENTITY, "Patient.identifier[0].value"))
+        elif is_create and nik_exists_fn is not None and nik_exists_fn(value):
+            out.append(Issue(code="duplicate",
+                             details_text="Found duplicate resource: Patient"
+                                          f" NIK {value}",
+                             expression="Patient.identifier"))
     if is_create:
         if any(i.get("system") == IHS_SYSTEM for i in identifiers):
             out.append(_issue(

@@ -138,6 +138,7 @@ async def update(type_: str, rid: str, request: Request):
 @router.delete("/{type_}/{rid}")
 async def delete(type_: str, rid: str, request: Request):
     try:
+        _check_media(request)
         _check_type(type_)
         svc, principal = get_service(request), get_principal(request)
         svc.delete(principal, type_, rid)

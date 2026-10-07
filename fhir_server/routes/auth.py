@@ -16,9 +16,11 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 @router.post("/token")
 async def token(request: Request):
     body = await _read_body(request)
+    if not isinstance(body, dict):
+        body = {}
     acct = accounts.get_by_username(request.app.state.conn,
-                                    body.get("username") or "")
-    if not acct or not verify_password(body.get("password", ""),
+                                    str(body.get("username") or ""))
+    if not acct or not verify_password(str(body.get("password") or ""),
                                        acct["password_hash"]):
         return JSONResponse(status_code=401,
                             content=to_outcome([Issue(

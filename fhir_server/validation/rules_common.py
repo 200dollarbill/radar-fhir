@@ -102,19 +102,31 @@ def check_datetimes(payload, resource_type, earliest_date=_FLOOR_DEFAULT):
                                 expression=f"{resource_type}.{path}",
                                 rule_number=R_DATETIME))
             continue
-        if parsed.date() < floor:
+        as_date = (parsed.astimezone(dt.timezone.utc).date()
+                   if parsed.utcoffset() is not None else parsed.date())
+        # S4's floor is about record event dates, not demographic dates: a
+        # Patient's birthDate may precede 2014 (final review issue 11).
+        is_birth = path.split(".")[-1].split("[")[0] == "birthDate"
+        if as_date < floor and not is_birth:
             issues.append(Issue(code="value",
                                 details_text=f"Date {value} earlier than allowed"
                                              f" earliest {earliest_date}",
                                 expression=f"{resource_type}.{path}",
                                 rule_number=L_EARLIEST_DATE))
-        if (not date_only and parsed > now + _GRACE
-                and not path.endswith("period.end")):
-            issues.append(Issue(code="value",
-                                details_text=f"Invalid date time value : {value}"
-                                             f" Not Allowed : Future Date",
-                                expression=f"{resource_type}.{path}",
-                                rule_number=R_DATETIME))
+        if not path.endswith("period.end"):
+            if date_only:
+                if as_date > now.date() + _GRACE:
+                    issues.append(Issue(code="value",
+                                        details_text=f"Invalid date value : {value}"
+                                                     f" Not Allowed : Future Date",
+                                        expression=f"{resource_type}.{path}",
+                                        rule_number=R_DATETIME))
+            elif parsed > now + _GRACE:
+                issues.append(Issue(code="value",
+                                    details_text=f"Invalid date time value : {value}"
+                                                 f" Not Allowed : Future Date",
+                                    expression=f"{resource_type}.{path}",
+                                    rule_number=R_DATETIME))
     return issues
 
 

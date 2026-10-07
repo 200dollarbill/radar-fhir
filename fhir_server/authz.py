@@ -72,6 +72,10 @@ def check(principal, action, resource_type, resource=None, *, conn=None):
         if resource_type == "Patient":
             if not _doctor_reads_patient(conn, principal, resource):
                 raise AuthzError("Doctor is not a participant for this patient")
+        elif resource_type == "Encounter":
+            if not doctor_reads_encounter(resource or {}, principal):
+                raise AuthzError(
+                    "Doctor is not a participant of this Encounter")
         elif resource_type == "Observation":
             if not doctor_reads_observation(conn, principal, resource):
                 raise AuthzError(
@@ -115,8 +119,10 @@ def filter_search(principal, resource_type, params, conn) -> dict:
     if principal.kind == "admin":
         return params
     if principal.kind == "patient":
+        own_id = _own_id(principal)
+        if own_id is None:
+            raise AuthzError("Patient account has no subject reference")
         if resource_type == "Patient":
-            own_id = _own_id(principal)
             if "identifier" in params:
                 if not str(params["identifier"]).endswith(own_id):
                     raise AuthzError("Patients may search only their own record")
@@ -146,7 +152,8 @@ def filter_search(principal, resource_type, params, conn) -> dict:
                 if not participates_in_patient(conn, principal.ref, pid):
                     raise AuthzError(
                         "Doctor has no participated encounter for this patient")
-                return params
+            # rows are still post-filtered by participation: one patient can
+            # have encounters this doctor is not on (final review issue 4)
             params["_scope_participant"] = principal.ref
             return params
         if resource_type in ("Organization", "Location", "Practitioner", "Device"):

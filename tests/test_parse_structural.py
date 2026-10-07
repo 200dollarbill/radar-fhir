@@ -64,3 +64,45 @@ def test_rejects_non_object_payload():
 def test_wrong_resource_type_key():
     issues, model = structural_issues("Patient", {"resourceType": "Observation"})
     assert model is None and issues
+
+
+def test_rejects_quoted_boolean_at_depth_two():
+    p = valid_patient()
+    p["extension"] = [{"url": "https://example.org/x", "valueBoolean": "true"}]
+    issues, model = structural_issues("Patient", p)
+    assert model is None
+    assert any("valueBoolean" in (i.expression or "") for i in issues)
+
+
+def test_rejects_quoted_integer_in_nested_quantity():
+    issues, model = structural_issues("Observation", {
+        "resourceType": "Observation",
+        "status": "final",
+        "code": {"coding": [{"system": "http://loinc.org", "code": "8867-4"}]},
+        "valueQuantity": {"value": "72", "system": "http://unitsofmeasure.org",
+                          "code": "/min"}})
+    assert model is None
+    assert any("valueQuantity" in (i.expression or "") for i in issues)
+
+
+def test_rejects_quoted_decimal_three_levels_deep():
+    issues, model = structural_issues("Observation", {
+        "resourceType": "Observation",
+        "status": "final",
+        "code": {"coding": [{"system": "http://loinc.org", "code": "8867-4"}]},
+        "component": [{"code": {"coding": [
+            {"system": "http://loinc.org", "code": "8867-4"}]},
+            "valueQuantity": {"value": "72", "system":
+                              "http://unitsofmeasure.org", "code": "/min"}}]})
+    assert model is None
+    assert any("component[0]" in (i.expression or "") for i in issues)
+
+
+def test_accepts_correct_nested_quantity():
+    issues, model = structural_issues("Observation", {
+        "resourceType": "Observation",
+        "status": "final",
+        "code": {"coding": [{"system": "http://loinc.org", "code": "8867-4"}]},
+        "valueQuantity": {"value": 72, "system": "http://unitsofmeasure.org",
+                          "code": "/min"}})
+    assert issues == [] and model is not None

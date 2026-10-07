@@ -103,3 +103,41 @@ def test_count_cap(svc):
     b = svc.search(ADMIN, "Observation", {"_count": "500"})
     assert b["total"] <= 500
     assert len(b.get("entry", [])) <= 100
+
+
+def test_doctor_subject_search_still_postfilters_rows(svc):
+    # same patient, but this encounter's only participant is someone else
+    resources.put(svc.conn, "Encounter", "e-foreign", {
+        "resourceType": "Encounter", "id": "e-foreign", "status": "arrived",
+        "subject": {"reference": "Patient/P11111111111"},
+        "participant": [{"individual": {"reference": "Practitioner/N99999999"}}]})
+    resources.put(svc.conn, "Observation", "o-foreign", {
+        "resourceType": "Observation", "id": "o-foreign", "status": "final",
+        "subject": {"reference": "Patient/P11111111111"},
+        "encounter": {"reference": "Encounter/e-foreign"},
+        "code": {"coding": [{"system": "http://loinc.org", "code": "8867-4"}]},
+        "effectiveDateTime": "2026-09-29T10:10:00+00:00"})
+    b = svc.search(DOC, "Observation", {"subject": "Patient/P11111111111"})
+    assert [e["resource"]["id"] for e in b.get("entry", [])] == ["o1"]
+    b2 = svc.search(DOC, "Encounter", {"subject": "Patient/P11111111111"})
+    assert "e-foreign" not in [e["resource"]["id"] for e in b2.get("entry", [])]
+
+
+def test_token_search_accepts_value_only_syntax(svc):
+    resources.put(svc.conn, "Patient", "P11111111111", {
+        "resourceType": "Patient", "id": "P11111111111",
+        "identifier": [{"system": "https://fhir.kemkes.go.id/id/nik",
+                        "value": "3175061001900001"}],
+        "name": [{"text": "Budi Santoso", "family": "Santoso",
+                  "given": ["Budi"]}]})
+    assert svc.search(ADMIN, "Patient",
+                      {"identifier": "3175061001900001"})["total"] == 1
+    b = svc.search(ADMIN, "Observation", {"code": "8867-4"})
+    assert b["total"] >= 1
+
+
+def test_count_zero_omits_entry(svc):
+    b = svc.search(ADMIN, "Observation", {"_count": "0"})
+    assert "entry" not in b and b["total"] == 2
+    b2 = svc.search(ADMIN, "Observation", {"_count": "-5"})
+    assert "entry" not in b2 and b2["total"] == 2

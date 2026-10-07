@@ -34,7 +34,7 @@ inline int postHeartRate(float bpm) {
     "\"subject\":{\"reference\":\"") + PATIENT_REF +
     "\"},\"encounter\":{\"reference\":\"" + ENCOUNTER_REF +
     "\"},\"effectiveDateTime\":\"" + utcNowIso() +
-    "\"},\"valueQuantity\":{\"value\":" + String(bpm, 1) +
+    "\",\"valueQuantity\":{\"value\":" + String(bpm, 1) +
     ",\"unit\":\"beats/minute\",\"system\":\"http://unitsofmeasure.org\","
     "\"code\":\"/min\"},\"device\":{\"reference\":\"" + DEVICE_REF +
     "\"},\"identifier\":[{\"system\":\"http://sys-ids.kemkes.go.id/organization/" +

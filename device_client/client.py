@@ -25,7 +25,7 @@ def _default_post(url, *, headers, data):
 def build_observation(*, patient, encounter, device, bpm, effective_datetime,
                       identifier_value=None):
     ident = [{"system": "http://sys-ids.kemkes.go.id/organization/100000001",
-              "value": identifier_value or "device-local-1"}]
+              "value": identifier_value or "radar-1"}]
     return {
         "resourceType": "Observation",
         "status": "final",

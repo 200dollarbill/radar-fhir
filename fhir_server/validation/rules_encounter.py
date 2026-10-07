@@ -70,9 +70,13 @@ def validate_encounter(payload, *, existing, org_id, duplicate_fn=None):
         new_status = payload.get("status")
         old_seq = _history_statuses(existing)
         new_seq = _history_statuses(payload)
-        if new_seq[:len(old_seq)] != old_seq:
-            out.append(_wajib("Encounter.statusHistory must preserve prior entries",
-                              "Encounter.statusHistory"))
+        new_hist = payload.get("statusHistory") or []
+        old_hist = existing.get("statusHistory") or []
+        if new_seq[:len(old_seq)] != old_seq or \
+                new_hist[:len(old_hist)] != old_hist:
+            out.append(_wajib(
+                "Encounter.statusHistory prior entries must be preserved"
+                " byte-for-byte", "Encounter.statusHistory"))
         try:
             forward = _ORDER.index(new_status) == _ORDER.index(old_status) + 1
         except ValueError:

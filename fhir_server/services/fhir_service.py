@@ -50,7 +50,7 @@ class FhirService:
         return res.exists(self.conn, t, i)
 
     def _rule_sets(self, resource_type, payload, *, existing=None,
-                   principal=None):
+                   principal=None, for_update=False):
         org = self.org_id
         out = []
         out += rules_common.check_datetimes(payload, resource_type,
@@ -66,8 +66,16 @@ class FhirService:
         elif resource_type == "Device":
             out += rules_master.validate_device(payload)
         elif resource_type == "Patient":
-            out += rules_patient.validate_patient(payload,
-                                                  is_create=existing is None)
+            def nik_exists(value):
+                for p_ in res.list(self.conn, "Patient"):
+                    for ident in p_.get("identifier") or []:
+                        if (ident.get("system") == rules_patient.NIK_SYSTEM
+                                and ident.get("value") == value):
+                            return True
+                return False
+            out += rules_patient.validate_patient(
+                payload, is_create=existing is None,
+                nik_exists_fn=nik_exists if existing is None else None)
         elif resource_type == "Encounter":
             def dup(value):
                 for e in res.list(self.conn, "Encounter"):
@@ -82,12 +90,18 @@ class FhirService:
             if principal is not None and principal.kind == "device":
                 device_ref = f"Device/{principal.device_id}"
                 assigned = principal.patient_id
+            def encounter_getter(ref):
+                if ref and "/" in ref:
+                    return res.get(self.conn, "Encounter", ref.split("/", 1)[1])
+                return None
             out += rules_observation.validate_observation(
                 payload, org_id=org, device_ref=device_ref,
-                assigned_patient=assigned)
-        if existing is None:
-            out += rules_common.check_references(payload, resource_type,
-                                                 self._exists)
+                assigned_patient=assigned,
+                encounter_getter=encounter_getter if principal is not None
+                and principal.kind == "device" else None)
+        # (final review issue 5) references are checked on update too
+        out += rules_common.check_references(payload, resource_type,
+                                             self._exists)
         return out
 
     @staticmethod
@@ -95,11 +109,13 @@ class FhirService:
         status = 409 if any(i.code == "duplicate" for i in issues) else 400
         raise FhirError(issues, status)
 
-    def _validated(self, principal, resource_type, payload, *, existing=None):
+    def _validated(self, principal, resource_type, payload, *, existing=None,
+                   for_update=False):
         issues, _ = parse.structural_issues(resource_type, payload)
         if not issues:
             issues = self._rule_sets(resource_type, payload, existing=existing,
-                                     principal=principal)
+                                     principal=principal,
+                                     for_update=for_update)
         if issues:
             self._raise(issues)
         return rules_common.canonicalize_datetimes(payload, resource_type)
@@ -139,6 +155,11 @@ class FhirService:
         new_id, doc = self._mint(resource_type, doc, self.org_id)
         if resource_type == "Encounter":
             doc = _ensure_participant(doc, principal)
+        if res.exists(self.conn, resource_type, new_id):
+            raise FhirError([Issue(
+                code="duplicate",
+                details_text=f"Id collision: {resource_type}/{new_id}"
+                             " already exists (refusing to overwrite)")], 409)
         res.put(self.conn, resource_type, new_id, doc)
         return new_id, res.get(self.conn, resource_type, new_id), 1
 
@@ -161,11 +182,14 @@ class FhirService:
                                    details_text=f"{resource_type}/{id_} not found")],
                             404)
         try:
-            authz.check(principal, "update", resource_type, payload,
+            # (final review issue 3) participation is a fact the server holds,
+            # not a claim in the payload: authorize against the stored row
+            authz.check(principal, "update", resource_type, existing,
                         conn=self.conn)
         except AuthzError as exc:
             raise _as_fhir_error(exc) from exc
-        doc = self._validated(principal, resource_type, payload, existing=existing)
+        doc = self._validated(principal, resource_type, payload,
+                              existing=existing, for_update=True)
         doc = dict(doc)
         doc["id"] = id_
         if resource_type == "Encounter":
@@ -216,7 +240,11 @@ class _BadParam(Exception):
 
 
 def _matches_identifier(doc, value):
-    want_system, _, want_value = str(value).partition("|")
+    raw = str(value)
+    if "|" not in raw:  # R4 token search allows value-only
+        want_system, want_value = "", raw
+    else:
+        want_system, _, want_value = raw.partition("|")
     for ident in doc.get("identifier") or []:
         if want_value and ident.get("value") != want_value:
             continue
@@ -268,7 +296,7 @@ def _search_impl(self, principal, resource_type, params):
                           for k, v in effective.items())]
     except _BadParam as exc:
         raise bad_param(str(exc), resource_type) from exc
-    if marker:
+    if principal.kind == "doctor":
         if resource_type == "Encounter":
             matched = [d for d in matched
                        if authz.doctor_reads_encounter(d, principal)]
@@ -286,7 +314,7 @@ def _search_impl(self, principal, resource_type, params):
     count = max(0, min(count, 100))
     bundle = {"resourceType": "Bundle", "type": "searchset",
               "total": len(matched)}
-    if matched:
+    if matched and count > 0:
         bundle["entry"] = [{"resource": d} for d in matched[:count]]
     return bundle
 
@@ -311,7 +339,11 @@ def _param_match(self, resource_type, doc, key, value):
     if key == "status":
         return doc.get("status") == value
     if key == "code":
-        want_system, _, want_code = str(value).partition("|")
+        raw = str(value)
+        if "|" not in raw:
+            want_system, want_code = "", raw
+        else:
+            want_system, _, want_code = raw.partition("|")
         codings = (doc.get("code") or {}).get("coding") or []
         return any((not want_system or c.get("system") == want_system)
                    and c.get("code") == want_code for c in codings)
