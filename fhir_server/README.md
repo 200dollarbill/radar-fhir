@@ -15,10 +15,15 @@ SQLite file.
 
 ```bash
 python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
+.venv/bin/pip install -e .            # installs fhir_server + device_client into the venv
 FHIR_ADMIN_PASSWORD=<choose> .venv/bin/python -m fhir_server seed --reset
 FHIR_JWT_SECRET=<choose> .venv/bin/python -m fhir_server serve --port 8000
 ```
+
+The editable install (`pip install -e .`, see `pyproject.toml`) makes
+`fhir_server` and `device_client` importable from any working directory —
+`.venv/bin/python -m pytest tests/test_scenario_e2e.py` works from the repo
+root, from `tests/`, or as a direct script run.
 
 `seed --reset` wipes and rebuilds the DB, then prints a JSON summary on its
 **last stdout line**: `admin_password`, `doctor_password`, `patient_password`,

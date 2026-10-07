@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "prata-fhir-server"
+version = "0.1.0"
+description = "Local SATUSEHAT-compatible FHIR R4 server (walking skeleton)"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi",
+    "fhir.resources",
+    "PyJWT",
+    "uvicorn",
+]
+
+[tool.setuptools]
+packages = ["fhir_server", "device_client"]
