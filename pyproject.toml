@@ -12,6 +12,7 @@ dependencies = [
     "fhir.resources",
     "PyJWT",
     "uvicorn",
+    "httpx2",  # starlette TestClient prefers it over httpx (test-only)
 ]
 
 [tool.setuptools]
