@@ -1,7 +1,8 @@
 # Public Exposure via Cloudflare + Request-History Frontend — Design
 
 **Date:** 2026-10-08
-**Status:** Design approved in conversation (two sections + tunnel amendment); written spec pending user review
+**Status:** Design approved in conversation (two sections + tunnel amendment +
+real-time transport amendment P9–P11); written spec pending user review
 **Parent:** walking-skeleton spec `docs/.superpowers/specs/2026-09-29-fhir-r4-server-walking-skeleton-design.md`
 
 ## Goal
@@ -11,6 +12,11 @@ project owner) and provide an HTML page showing the history of GETs/POSTs with
 full request bodies. Cloudflare is only the gate: DNS + Cloudflare Access +
 the tunnel transport. Authorization of data remains the server's existing
 JWT/device-token machinery.
+
+Additionally, the measurement device streams **1 Hz heart-rate readings over
+one long-lived WebSocket** through the same public path: no per-message TLS
+handshake, sequence numbers persisted across reboot so lost readings are
+detectable, and UTC timestamps for exact time indexing.
 
 ## Decisions taken in brainstorming (with rationale)
 
@@ -24,6 +30,9 @@ JWT/device-token machinery.
 | P6 | Retention: **7 days + 10 000-row cap** (whichever trips first), purged on write | Bounds PHI duplication while keeping recent debugging history |
 | P7 | Audit capture lives in **FastAPI middleware**, not nginx | nginx cannot capture request bodies portably; middleware is pytest-able like the rest of the repo |
 | P8 | Log-read API: **admin FHIR JWT only** at `GET /fhir-r4/v1/admin/request-log` | Reuses the existing account/role machinery; Access gates the hostname, JWT gates the data |
+| P9 | Transport (owner requirement, technically corrected): measurements flow over **one persistent WebSocket per device** — TLS at the Cloudflare edge is established **once** and reused, never re-handshaked per message; cloudflared's tunnel is likewise a single long-lived connection. A public Cloudflare hostname cannot be plain HTTP, but per-reading handshake cost is **zero** | Owner wanted "no handshake constantly" — that is what a WebSocket already provides; the change is in transport, not in removing edge security |
+| P10 | WS payload: **heart-rate readings only** — `{device_id, seq, utc, bpm}` at ~1 Hz, replacing today's HTTP POST path; each message validated and stored as the same FHIR Observation | Owner chose this over raw 100 Hz I/Q telemetry (deferred); nine-step E2E flow stays intact |
+| P11 | Sequence: **persisted on the device across reconnects and reboots**, monotonic (ESP32 NVS/Preferences); server records `(device_id, seq, utc)` per Observation, detects gaps/duplicates, and reconciles missing readings on reconnect | Owner's choice; a per-session index would hide gaps across reboots |
 
 ## Topology (amended)
 
@@ -38,15 +47,26 @@ nginx (127.0.0.1:8080, this machine, TLS not required locally —
        Cloudflare edge terminates TLS; nginx serves HTTP on loopback)
    ├── GET /history          → static history.html (deploy/)
    └── /                     → proxy_pass http://127.0.0.1:8000 (uvicorn)
+                               WS Upgrade headers configured on stream path
                                 |
                          FastAPI
                          ├── audit middleware → request_log table (SQLite)
+                         ├── GET /fhir-r4/v1/stream (WebSocket, device token)
                          └── existing FHIR routes / auth / validation (unchanged)
 ```
 
 Note: since the tunnel terminates TLS at the Cloudflare edge and cloudflared
 speaks plain HTTP to its local ingress target, nginx runs on loopback without
 its own certificates. Cloudflare's origin certificate is **not** needed.
+
+**Transport reality check (P9):** the device's only TLS event is the initial
+`wss://` handshake at the Cloudflare edge; every subsequent reading rides the
+same connection end-to-end (edge → tunnel → nginx `Upgrade` → uvicorn). nginx
+must forward `Upgrade`/`Connection` headers on `/fhir-r4/v1/stream` and hold
+the proxied connection open (`proxy_read_timeout` ≥ 75 s, refreshed by the
+device's 1 Hz traffic). TLS at the edge cannot be removed for a Cloudflare
+hostname — it costs nothing per message after the first handshake, which is
+the property the owner needs.
 
 ## Scope
 
@@ -68,8 +88,24 @@ its own certificates. Cloudflare's origin certificate is **not** needed.
   systemd units, secrets checklist (strong admin password, no token sharing),
   verification steps.
 - `fhir_server/cli.py`: `serve --host` flag (default `127.0.0.1`, unchanged).
+- **WebSocket stream:** `GET /fhir-r4/v1/stream` — device authenticates in the
+  WS handshake with the existing device bearer token (documented placement);
+  message schema `{device_id, seq, utc, bpm}`; each valid message reuses the
+  existing Observation validation/minting (P10) with `identifier` carrying
+  `(device_id, seq)` for durable duplicate/gap tracking; server replies an
+  `{ok, last_seq}` ack so the device knows what landed.
+- **Gap detection:** `GET /fhir-r4/v1/admin/gaps?device=…` (admin JWT)
+  reports sequence gaps derived from stored Observations.
+- **Firmware change:** `arduino/radar_json/ingest.*` switches from HTTP POST
+  to a WebSocket client (1 Hz); sequence counter persisted in ESP32
+  Preferences/NVS so it survives reboot (P11); `configTime` supplies UTC —
+  same source as today.
+- **Python device client:** `device_client` gains a WS mode mirroring the
+  firmware contract for tests and manual runs.
 - Tests: audit middleware, retention, redaction, admin-only log endpoint,
-  history-page escaping (static assertion), nginx config syntax check.
+  history-page escaping (static assertion), nginx config syntax check,
+  WS handshake auth (401/403), message → Observation conversion, sequence
+  gap detection + duplicate suppression, reconnect replay.
 
 ### Excluded
 
@@ -78,7 +114,11 @@ its own certificates. Cloudflare's origin certificate is **not** needed.
 - Response-body logging (request bodies only, per P5).
 - TLS certs on nginx (edge terminates TLS).
 - Logout/token revocation UI, multi-user log views, log export.
-- Any change to FHIR routes, auth, validation, or firmware.
+- Any change to the existing HTTP FHIR routes, auth, or validation (the WS
+  path reuses them internally; it adds, not modifies).
+- Raw 100 Hz radar telemetry streaming (P10 defers it to a later sub-project).
+- Server-side clock sync beyond UTC+00 discipline (NTP on device, `configTime`,
+  is unchanged from today).
 - HTTPS claims about the public URL without live verification in the owner's
   environment (see Verification).
 
@@ -116,6 +156,12 @@ fail the proxied request.
 3. Owner opens `https://<hostname>/history` (also Access-gated), enters their
    admin username/password → page calls `POST /auth/token` same-origin → keeps
    JWT in memory → `GET /fhir-r4/v1/admin/request-log` → renders rows.
+4. Device connects `wss://<hostname>/fhir-r4/v1/stream` once (token in the
+   handshake) → sends `{device_id, seq, utc, bpm}` at 1 Hz on that one
+   connection → server validates, mints the Observation, acks `{ok, last_seq}`.
+   After a reconnect the device first re-sends unacked readings (`seq >
+   last_seq`) so nothing is silently lost; the server suppresses duplicates by
+   `(device_id, seq)`.
 
 ## Error handling
 
@@ -128,6 +174,12 @@ fail the proxied request.
   error page (documented in deploy README); local server keeps running.
 - SQLite lock timeout on the audit insert → warning path above; the FHIR
   response itself is already committed by then.
+- WS handshake without/invalid device token → close before accept (equivalent
+  of 401); assignment mismatch on a message → `{ok: false, error}` on the open
+  socket (the socket stays up for the next reading).
+- Device disconnect → nothing to clean up server-side (stateless per message);
+  server keeps serving HTTP; device reconnects with exponential backoff
+  (firmware) and resumes from `last_seq + 1`.
 
 ## Testing
 
@@ -141,9 +193,16 @@ fail the proxied request.
   `innerHTML` assignment) — static test of the shipped HTML.
 - `nginx -t` syntax check for `deploy/nginx.conf` (skips with a clear message
   if nginx is absent).
-- **Verification gate:** local `uvicorn` + `nginx` + curl through localhost is
-  runnable here; the Cloudflare half (DNS, Access, live tunnel) must be verified
-  by the owner per `deploy/README.md` — never claimed as working without it.
+- WS: handshake rejects bad/missing tokens; valid token converts messages
+  through the same validation path (bad bpm → error ack, not socket close);
+  duplicate `seq` acked without a second Observation; out-of-order/replay
+  messages stored idempotently; `last_seq` ack correct after each store.
+- Firmware contract: same treatment as `test_firmware_contract.py` — the WS
+  message builder's JSON is parsed in tests and compared with `device_client`.
+- **Verification gate:** local `uvicorn` + `nginx` + curl/WS client through
+  localhost is runnable here; the Cloudflare half (DNS, Access, live tunnel)
+  must be verified by the owner per `deploy/README.md` — never claimed as
+  working without it.
 
 ## Security posture (explicit)
 
@@ -151,6 +210,10 @@ fail the proxied request.
 - App: unchanged FHIR JWT/device-token authz = data gate.
 - Secrets: audit never persists headers; login body redacted; `.env`, `*.db`
   already gitignored.
+- Stream: device token required at handshake; WS upgrade path is the only
+  route the device ever needs — it cannot read Patient/Encounter resources
+  (existing authz unchanged); Access does not gate the device path, FHIR's own
+  device-token authz does (documented in deploy README).
 - Residual accepted risks (owner's choices): full request bodies duplicated in
   SQLite for 7 days (P5/P6); public hostname discoverable by third parties
   (mitigated by Access, not hidden).
@@ -162,6 +225,7 @@ fhir_server/audit.py            # middleware + repository + retention
 fhir_server/app.py              # mount middleware
 fhir_server/routes/admin.py     # + GET /admin/request-log
 fhir_server/cli.py              # serve --host
+fhir_server/stream.py           # WebSocket endpoint + ack/gap logic
 deploy/history.html
 deploy/nginx.conf
 deploy/cloudflared.yml
@@ -175,3 +239,6 @@ tests/test_admin_log.py (extends test_routes or separate)
 - Parent spec: `docs/.superpowers/specs/2026-09-29-fhir-r4-server-walking-skeleton-design.md`
 - `docs/reference/claude/fhir-security.md` (access-control error shapes)
 - Brainstorming session 2026-10-08 (decisions P1–P8, tunnel amendment)
+- Brainstorming session 2026-10-09 (decisions P9–P11: WebSocket transport,
+  heart-rate payload, persisted sequence; owner requirement: no per-message
+  handshake, exact time indexing)
