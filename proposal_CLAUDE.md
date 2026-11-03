@@ -54,16 +54,16 @@ The current fishbone is `docs/presentation/ets/fishbone.md`, with the head: RADA
 
 **Concede first:** the device is a point-of-care measurement device. The thesis must not depend on long-term monitoring.
 
-The argument is a chain. A weak link weakens everything after it. The literature phase tests each link, and `docs/papers/search/README.md` holds the strength assessment once written.
+The argument is a chain. A weak link weakens everything after it. The literature phase tested each link. See `docs/papers/search/README.md` for the assessment, based on abstracts until the student reads the papers. **L6 (radar) is now the weakest link. L3 evidence is about wave shape and depth, while the RADAR group output is described as time intervals, so ask whether X and Y descent depth is available.**
 
 | Link | Claim | Current support |
 |---|---|---|
 | L1 | Heart failure burden and readmission are high | [1] to [4]; Indonesian HF-specific figure still missing |
 | L2 | Residual congestion drives readmission; venous pressure rises before symptoms | [4], [31], [32] |
-| L3 | JVP waveform features carry cardiovascular information beyond a single height value | [7] only. **Weakest and highest priority** |
-| L4 | A single measurement at discharge or in clinic has value. Answers the thermometer objection | [13]; [12] argues against. **Highest priority** |
+| L3 | JVP waveform features carry cardiovascular information beyond a single height value | [7], plus Harada 2019 and 2024 (deep Y descent, HR 2.05 and 2.68), pending reading |
+| L4 | A single measurement at discharge or in clinic has value. Answers the thermometer objection | [13] and Drazner 2001; [12] argues against. Contested, pending reading |
 | L5 | Bedside assessment is limited, so objective measurement is needed | [6], [8]; two-object-method figures still marked `[new]` |
-| L6 | RADAR captures those features, not only the pulse | [6], [10]; small feasibility studies |
+| L6 | RADAR captures those features, not only the pulse | [6], [10]; small feasibility studies. **Weakest link** |
 | L7 | JVP is only meaningful with context, so combining it with RME and ECG is justified | [7], [12], [14], [15] |
 | L8 | Integrated display helps clinicians | [36] to [38] |
 
@@ -94,7 +94,9 @@ The argument is a chain. A weak link weakens everything after it. The literature
 7. **Missing content.** 2.6 is `[diisi mahasiswa]`, and BAB III is not written.
 8. **PGHD definition.** 1.1 says "diluar kunjungan klinis", but data collection is planned in a polyclinic. Decide whether RADAR data counts as PGHD here. The same paragraph also says "alat monitoring", which is acceptable only as general PGHD background.
 9. **Patient features.** 2.7 says the platform facilitates patients "menyimpan dan membagikan data". The supervisor has not confirmed this is committed.
-10. **Source [12].** 1.1 calls it "Suatu studi meta analisis", while the source catalogue calls it a propensity-matched study by Drazner et al. and an earlier note names Meyer et al., Am J Cardiol 2009, PMID 19268742. The repair notes say the citation is mixed. Identify the actual paper.
+10. **Source [12].** Identified on 2026-11-03: Meyer et al., Am J Cardiol 2009, doi 10.1016/j.amjcard.2008.11.045, a propensity-matched analysis of the DIG trial. 1.1 wrongly calls it "Suatu studi meta analisis", and the catalogue wrongly names Drazner.
+11. **Source [13].** The title, pages and DOI (ihj.23-181) do not match the paper found: Kenichi Kasai et al., "Jugular Venous Pressure and Kussmaul's Sign as Predictors of Outcome in Heart Failure", ihj.23-183. Check the student's copy.
+12. **Source [6].** Cited as a preprint. A peer-reviewed version exists: Royal Society Open Science 2025, doi 10.1098/rsos.242231.
 
 ---
 
