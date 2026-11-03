@@ -54,13 +54,13 @@ The current fishbone is `docs/presentation/ets/fishbone.md`, with the head: RADA
 
 **Concede first:** the device is a point-of-care measurement device. The thesis must not depend on long-term monitoring.
 
-The argument is a chain. A weak link weakens everything after it. The literature phase tested each link. See `docs/papers/search/README.md` for the assessment, based on abstracts until the student reads the papers. **L6 (radar) is now the weakest link. L3 evidence is about wave shape and depth, while the RADAR group output is described as time intervals, so ask whether X and Y descent depth is available.**
+The argument is a chain. A weak link weakens everything after it. The literature phase tested each link. See `docs/papers/search/README.md` for the assessment, based on abstracts until the student reads the papers. **L6 (radar) is now the weakest link. JVP outcome evidence is about wave shape and depth, and carotid interval evidence comes from echo and Doppler. No JVP interval outcome study was found. Ask the RADAR group whether X and Y descent depth is available and which carotid intervals they report.**
 
 | Link | Claim | Current support |
 |---|---|---|
 | L1 | Heart failure burden and readmission are high | [1] to [4]; Indonesian HF-specific figure still missing |
-| L2 | Residual congestion drives readmission; venous pressure rises before symptoms | [4], [31], [32] |
-| L3 | JVP waveform features carry cardiovascular information beyond a single height value | [7], plus Harada 2019 and 2024 (deep Y descent, HR 2.05 and 2.68), pending reading |
+| L2 | Residual congestion drives readmission; venous pressure rises before symptoms | [4], [31], [32]; implanted-monitor studies in `docs/papers/search/L2-congestion.md` |
+| L3 | JVP waveform features carry cardiovascular information beyond a single height value | [7], plus Harada 2019, 2023, 2024 (deep Y descent, HR 2.05, 3.15, 2.68, one group), pending reading |
 | L4 | A single measurement at discharge or in clinic has value. Answers the thermometer objection | [13] and Drazner 2001; [12] argues against. Contested, pending reading |
 | L5 | Bedside assessment is limited, so objective measurement is needed | [6], [8]; two-object-method figures still marked `[new]` |
 | L6 | RADAR captures those features, not only the pulse | [6], [10]; small feasibility studies. **Weakest link** |
@@ -110,7 +110,7 @@ From searches, not all read in full. New results go to `docs/papers/search/`.
 
 **Non-invasive sensing:** handheld ultrasound had a higher imaging success rate than inspection, but obesity still reduced accuracy (Wang et al., Ann Intern Med 2021, via a summary). IJV ultrasound shows inter-observer variability for some parameters (Italian Journal of Medicine, 2026).
 
-**Radar:** the 60 GHz FMCW study (PMC12187424; preprint medRxiv 2024.06.04.24308313) validated morphology against PPG, and compared with catheter data from **one** early-stage HF patient. **TODO-verify** journal and peer-review status.
+**Radar:** the 60 GHz FMCW study (PMC12187424; preprint medRxiv 2024.06.04.24308313) validated morphology against PPG, and compared with catheter data from **one** early-stage HF patient. Peer-reviewed version: Royal Society Open Science 2025 (section 6, item 12).
 
 **Heart failure link:** elevated JVP was the only congestion sign independently associated with 60-day rehospitalization, HR 1.64, in 1,551 patients (ESC Heart Failure, **TODO-verify**). Rehospitalization up to 50% in six months (PMC10898581), 30 to 60% (PMC2744520).
 

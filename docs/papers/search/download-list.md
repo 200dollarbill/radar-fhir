@@ -23,8 +23,13 @@ Generated from the `L*.md` files. Papers you already hold are listed separately 
 - [ ] Non-contact hemodynamic imaging reveals the jugular venous pulse waveform (2017, supports) https://doi.org/10.1038/srep40150
 - [ ] The Role of the Clinical Examination in Patients With Heart Failure (2018, qualifies) https://doi.org/10.1016/j.jchf.2018.04.005
 - [ ] Right Atrial Pressure Waveform Pattern Reflects Right Ventricular Compliance and Predicts Right Heart Failure Post-Left Ventricular Assist Device Implantation (2026, supports) https://www.jhltonline.org/article/S1053-2498(26)00632-7/fulltext
-- [ ] Chapter 19: The Jugular Venous Pressure and Pulse Contour (Clinical Methods (NCBI Bookshelf), supports) https://www.ncbi.nlm.nih.gov/books/NBK300/
+- [ ] Chapter 19: The Jugular Venous Pressure and Pulse Contour (year not retrieved, supports) https://www.ncbi.nlm.nih.gov/books/NBK300/
 - [ ] The jugular veins: gateway to the heart (2016, contradicts) https://www.mja.com.au/journal/2016/205/5/jugular-veins-gateway-heart
+- [ ] The significance of left ventricular ejection time in heart failure with reduced ejection fraction (2021, supports) https://doi.org/10.1002/ejhf.2125
+- [ ] Left Ventricular Ejection Time Derived From the Common Carotid Artery Doppler Waveform: Association With Left Ventricular Ejection Fraction and Prediction of Heart Failure (2015, supports) https://doi.org/10.7863/ultra.34.7.1237
+- [ ] A critical review of the systolic time intervals (1977, qualifies) https://doi.org/10.1161/01.cir.56.2.146
+- [ ] Left Ventricular Systolic Ejection Time is an Independent Predictor of All-Cause Mortality in Heart Failure with Reduced Ejection Fraction (2021, supports) https://academic.oup.com/eurjhf/article/23/2/240/8377779
+- [ ] Association Between Systolic Ejection Time and Outcomes in Heart Failure by Ejection Fraction (2020, qualifies) https://academic.oup.com/eurjhf/article/22/7/1174/8385219
 
 ## L4: single measurement
 
@@ -52,7 +57,7 @@ Generated from the `L*.md` files. Papers you already hold are listed separately 
 
 - [ ] A feasibility study on non-invasive and non-contact jugular venous pulse measurement using 60 GHz FMCW radar (2025, supports) https://doi.org/10.1098/rsos.242231
 - [ ] A Noninvasive and Noncontact Jugular Venous Pulse Measurement Using a 60-GHz mmWave Sensor (2025, supports) https://doi.org/10.46620/25-0004
-- [ ] MM-Wave Radar Vitals Sensing: Towards Non-Contact Cardiac and Respiratory Gating for MRI (, supports) https://doi.org/10.58530/2025/4979
+- [ ] MM-Wave Radar Vitals Sensing: Towards Non-Contact Cardiac and Respiratory Gating for MRI (2025, supports) https://doi.org/10.58530/2025/4979
 - [ ] Extracting the Jugular Venous Pulse from Anterior Neck Contact Photoplethysmography (2020, supports) https://doi.org/10.1038/s41598-020-60317-7
 - [ ] Non-contact Quantification of Jugular Venous Pulse Waveforms from Skin Displacements (2018, supports) https://doi.org/10.1038/s41598-018-35483-4
 - [ ] Optical Hemodynamic Imaging of Jugular Venous Dynamics During Altered Central Venous Pressure (2021, supports) https://doi.org/10.1109/TBME.2021.3069133
@@ -90,6 +95,10 @@ Generated from the `L*.md` files. Papers you already hold are listed separately 
 - [ ] Subclinical Congestion Evaluated by Point of Care Ultrasound (POCUS) at Discharge Predicts Readmission in Patients with Acute Heart Failure: Prognostic Cohort Study (2024, supports) https://doi.org/10.24908/pocus.v9i2.17709
 - [ ] Clinical value of pre-discharge bio-adrenomedullin as a marker of residual congestion and high risk of heart failure hospital readmission (2020, qualifies) https://doi.org/10.1002/ejhf.1693
 - [ ] Importance of venous congestion for worsening of renal function in advanced decompensated heart failure (2009, supports) https://doi.org/10.1016/j.jacc.2008.05.068
+- [ ] Ongoing right ventricular hemodynamics in heart failure: clinical value of measurements derived from an implantable monitoring system (2003, supports) https://doi.org/10.1016/s0735-1097(02)02896-6
+- [ ] Implantable Hemodynamic Monitoring for Heart Failure Patients (2017, supports) https://doi.org/10.1016/j.jacc.2017.05.052
+- [ ] Hemodynamic changes before acute heart failure episodes in patients with advanced systolic left ventricular dysfunction (2008, qualifies) https://doi.org/10.2459/JCM.0b013e3282f7301d
+- [ ] Daily Weights at Home Are Not Reliable for Tracking Fluid Change before Heart Failure Events (year not retrieved, supports) https://onlinejcf.com/article/S1071-9164(07)00847-0/fulltext
 
 ## L5: bedside limits
 
@@ -108,7 +117,7 @@ Generated from the `L*.md` files. Papers you already hold are listed separately 
 - [ ] CREATING AN INPATIENT DIURESIS DASHBOARD FOR ACUTE DECOMPENSATED HEART FAILURE: A TIME-MOTION STUDY OF ELECTRONIC MEDICAL RECORD USE (2019, supports) https://doi.org/10.1016/s0735-1097(19)31332-4
 - [ ] Supporting Clinical Cognition: A Human-Centered Approach to a Novel ICU Information Visualization Dashboard (2015, supports) https://pubmed.ncbi.nlm.nih.gov/26958190/
 - [ ] Integration of an Intensive Care Unit Visualization Dashboard (i-Dashboard) as a Platform to Facilitate Multidisciplinary Rounds: Cluster-Randomized Controlled Trial (2022, supports) https://doi.org/10.2196/35981
-- [ ] Novel displays of patient information in critical care settings: a systematic review (2019, supports) https://doi.org/10.1093/jamia/ocy193
+- [ ] Novel displays of patient information in critical care settings: a systematic review (2019, qualifies) https://doi.org/10.1093/jamia/ocy193
 - [ ] The Impact of Visualization Dashboards on Quality of Care and Clinician Satisfaction: Integrative Literature Review (2018, supports) https://doi.org/10.2196/humanfactors.9328
 - [ ] Prevalence and Sources of Duplicate Information in the Electronic Medical Record (2022, supports) https://doi.org/10.1001/jamanetworkopen.2022.33348
 - [ ] Human-Centred Co-Design of a Clinical Heart Failure Dashboard (2026, supports) https://www.heartlungcirc.org/article/S1443-9506(26)01112-1/fulltext

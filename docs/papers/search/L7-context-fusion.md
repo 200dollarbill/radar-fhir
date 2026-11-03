@@ -13,14 +13,14 @@
 
 ### Renal function, electrolytes, and congestion monitoring in heart failure
 - **Authors:** Rossignol P, Coats AJ, Chioncel O, Spoletini I, Rosano G
-- **Year / venue / type:** 2019 / European heart journal supplements : journal of the European Society of Cardiology / journal article
+- **Year / venue / type:** 2019 / European heart journal supplements : journal of the European Society of Cardiology / journal article / **ERRATUMIN**
 - **DOI:** 10.1093/eurheartj/suz220
 - **URL:** https://doi.org/10.1093/eurheartj/suz220
 - **Stance:** supports
 - **Owner has it:** no
 - **Found by:** combining data
 - **Metadata source:** PubMed 31908612
-- **Claude's note:** Lab markers add prognostic information beyond residual clinical congestion.
+- **Claude's note:** Review on monitoring congestion alongside labs. An erratum exists, see the type field.
 
 **Abstract:** Congestion, renal function, and electrolyte imbalance (particularly potassium) are common problems in the management of the complex multi-morbid patient with heart failure (HF). Poor control of these fundamental clinical features is associated with adverse outcomes. Close monitoring of serum potassium and renal function is recommended by most current guidelines during the management of an episode of acute decompensated HF, yet the recommendations remain poorly implemented. Physicians are advised to treat a state of euvolaemia after an admission with decompensated HF and residual congestion is a marker of worse outcome, yet control of congestion is poorly assessed and managed in real-world practice. This document reflects the key points discussed by a panel of experts during a Heart Failure Association meeting on physiological monitoring of the complex multi-morbid HF patient, and here, we present to aspects related to renal function, electrolyte, and congestion monitoring.
 

@@ -71,11 +71,11 @@ TRIAL REGISTRATION: ClinicalTrials.gov NCT04845698; https://clinicaltrials.gov/c
 - **Year / venue / type:** 2019 / Journal of the American Medical Informatics Association : JAMIA / Systematic Review
 - **DOI:** 10.1093/jamia/ocy193
 - **URL:** https://doi.org/10.1093/jamia/ocy193
-- **Stance:** supports
+- **Stance:** qualifies
 - **Owner has it:** no
 - **Found by:** PubMed information overload
 - **Metadata source:** PubMed 30865769
-- **Claude's note:** Systematic review of novel displays in critical care.
+- **Claude's note:** Systematic review. Weak evidence overall, only 1 of 5 randomized trials positive on its primary outcome. Counter-weight to the dashboard argument.
 
 **Abstract:** OBJECTIVE: Clinician information overload is prevalent in critical care settings. Improved visualization of patient information may help clinicians cope with information overload, increase efficiency, and improve quality. We compared the effect of information display interventions with usual care on patient care outcomes.
 

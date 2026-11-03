@@ -12,7 +12,7 @@
 **Abstract:** The jugular venous pulse (JVP) reflects right atrial pressure and provides diagnostic insight into cardiovascular and pulmonary health. However, reliable assessment remains difficult due to neck adiposity, anatomical variability and suboptimal positioning. Although central venous catheterization is the gold standard, its invasive nature restricts routine or long-term use. This study introduces a non-invasive method for JVP estimation using a 60 GHz frequency-modulated continuous wave (FMCW) radar. The system captures venous pulsations at the skin surface and applies eigenbeamforming to enhance signal-to-noise ratio and pulse clarity. Radar parameters were optimized for signal fidelity and validated through morphological comparison with simultaneously recorded photoplethysmography (PPG) signals. Additionally, we compared radar-derived JVP signals with previously recorded catheterization data from a patient with early-stage heart failure to assess clinical relevance. Signal localization was successfully achieved within a direction-of-arrival (DoA) range of - 20 ∘   to + 20 ∘   , demonstrating the radar's precision. While the selected parameters consistently yielded good performance in our set-up, individual anatomical differences may require subject-specific calibration. These findings support the potential of 60 GHz FMCW radar for contactless JVP monitoring, with promising implications for early detection and remote management of heart failure.
 
 ### A Noninvasive and Noncontact Jugular Venous Pulse Measurement Using a 60-GHz mmWave Sensor
-- **Authors:** 
+- **Authors:** not retrieved
 - **Year / venue / type:** 2025 / URSI Radio Science Letters / journal-article
 - **DOI:** 10.46620/25-0004
 - **URL:** https://doi.org/10.46620/25-0004
@@ -20,7 +20,7 @@
 - **Owner has it:** no (P4 is the preprint of related work)
 - **Found by:** radar JVP
 - **Metadata source:** Crossref; abstract from publisher page via Exa
-- **Claude's note:** Same group, conference-style version. Check overlap before citing both.
+- **Claude's note:** Conference-style version on the same topic as Das et al. Authors were not in the metadata, so check overlap in the PDF.
 
 **Abstract:** The jugular venous pulse (JVP) offers key insights into right atrial pressure and cardiovascular health, but its assessment is often limited by anatomic variability and the invasiveness of catheterization. This study presents a noninvasive 60-GHz frequency-modulated continuous wave radar system for JVP estimation, using eigen beamforming to enhance signal quality and pulse detection. Optimized radar parameters enabled accurate capture of skin surface venous pulsations, validated through waveform comparison with simultaneous photoplethysmography. Signal localization within a direction of arrival range of −20° to 20° confirmed system precision. Results highlight the radar's potential for contactless, early-stage heart failure monitoring.
 
@@ -39,7 +39,7 @@
 
 ### MM-Wave Radar Vitals Sensing: Towards Non-Contact Cardiac and Respiratory Gating for MRI
 - **Authors:** Arora Hemal, Robb Fraser, Vasanawala Shreyas, Pauly John, Scott Greig
-- **Year / venue / type:**  / ISMRM Annual Meeting / proceedings-article
+- **Year / venue / type:** 2025 / ISMRM Annual Meeting / proceedings-article
 - **DOI:** 10.58530/2025/4979
 - **URL:** https://doi.org/10.58530/2025/4979
 - **Stance:** supports

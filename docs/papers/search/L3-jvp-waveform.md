@@ -59,7 +59,7 @@
 - **Owner has it:** no
 - **Found by:** RAP waveform and prognosis
 - **Metadata source:** PubMed 31175868
-- **Claude's note:** Dominant Y descent predicts RV failure after LVAD, shows waveform adds to pressure numbers.
+- **Claude's note:** Catheter waveform, LVAD candidates. The abstract says "A distensible RV" for dominant Y, but the full text says "less distensible RV as reflected by a dominant Y descent" (OR 10.5). Check this in the PDF before citing.
 
 **Abstract:** BACKGROUND: Right ventricular failure (RVF) is one of the major adverse events after left ventricular assist device (LVAD) implantation. Right ventricle (RV) distensibility plays a key role in the preload reserve capability and in RV ejection through the Frank-Starling mechanism. However, there are no studies focusing on the relationship between RVF and RV distensibility.
 
@@ -164,7 +164,7 @@ CONCLUSIONS: A less-distensible right ventricle and elevated RV systolic pressur
 - **Owner has it:** no
 - **Found by:** RAP waveform and prognosis
 - **Metadata source:** PubMed 38939016
-- **Claude's note:** Largest deep Y study found: 350 HF patients, HR 2.68 for cardiac events, independent of RV-PA coupling.
+- **Claude's note:** 350 HF patients, HR 2.68 for cardiac events. Same group as the 2019, 2020 and 2023 papers, so cohorts may overlap. The abstract sentence stating the result is garbled at source.
 
 **Abstract:** BACKGROUND: A deep Y descent in the jugular venous pulse (JVP) is associated with diseases such as a decrease in right ventricular (RV) preload reserve. The present study investigated the relationship between RV-pulmonary arterial (PA) coupling and a deep Y descent, examined risk factors for a deep Y descent and clarified whether a deep Y descent was an independent risk factor for cardiac events irrespective of RV-PA coupling in patients with heart failure (HF).
 
@@ -207,7 +207,7 @@ RESULTS AND CONCLUSIONS: A deep Y descent and cardiac events were observed in 12
 - **Owner has it:** no
 - **Found by:** PubMed citation following
 - **Metadata source:** PubMed 37953805
-- **Claude's note:** RV diastolic dysfunction and outcomes, uses the less distensible RV concept.
+- **Claude's note:** Largest outcome result for this feature in these searches: 387 HF patients. Same group, from their own JVP database, so it may overlap with other cohorts.
 
 **Abstract:** BACKGROUND: Heart failure (HF) is a rapidly growing public health issue in super aging societies, such as Japan. Right HF is common in older patients. Therefore, the present study investigated the relationship between right ventricular diastolic function and poor clinical outcomes in patients with HF.
 
@@ -296,7 +296,7 @@ Conclusion: A predominant RAP y-descent was associated with increased RV stiffne
 
 ### Chapter 19: The Jugular Venous Pressure and Pulse Contour
 - **Authors:** Mark M. Applefeld
-- **Year / venue / type:** Clinical Methods (NCBI Bookshelf) / book chapter
+- **Year / venue / type:** year not retrieved / Clinical Methods (NCBI Bookshelf) / book chapter
 - **DOI:** 
 - **URL:** https://www.ncbi.nlm.nih.gov/books/NBK300/
 - **Stance:** supports
@@ -308,7 +308,7 @@ Conclusion: A predominant RAP y-descent was associated with increased RV stiffne
 **Abstract:** abstract not retrieved
 
 ### The jugular veins: gateway to the heart
-- **Authors:** 
+- **Authors:** not retrieved
 - **Year / venue / type:** 2016 / The Medical Journal of Australia / clinical focus article
 - **DOI:** 
 - **URL:** https://www.mja.com.au/journal/2016/205/5/jugular-veins-gateway-heart
@@ -319,4 +319,83 @@ Conclusion: A predominant RAP y-descent was associated with increased RV stiffne
 - **Claude's note:** Says most clinicians cannot identify specific waves, and that this matters little in practice. Examiners may hold this view.
 
 **Abstract:** abstract not retrieved
+
+### The significance of left ventricular ejection time in heart failure with reduced ejection fraction
+- **Authors:** Alhakak AS, Teerlink JR, Lindenfeld J, Böhm M, Rosano GMC, Biering-Sørensen T
+- **Year / venue / type:** 2021 / European journal of heart failure / Review
+- **DOI:** 10.1002/ejhf.2125
+- **URL:** https://doi.org/10.1002/ejhf.2125
+- **Stance:** supports
+- **Owner has it:** no
+- **Found by:** time interval outcomes
+- **Metadata source:** PubMed 33590579
+- **Claude's note:** Carotid, not JVP. Review of ejection time. Early work measured it from the carotid pulse tracing, which is close to radar output.
+
+**Abstract:** Left ventricular ejection time (LVET) is defined as the time interval from aortic valve opening to aortic valve closure, and is the phase of systole during which the left ventricle ejects blood into the aorta. LVET has been used for several decades to assess left ventricular function and contractility. However, there is a recent interest in LVET as a measure of therapeutic action for novel drugs in patients with heart failure with reduced ejection fraction (HFrEF), since LVET is shortened in these patients. This review provides an overview of the available information on LVET including methods of measuring LVET, mechanistic understanding of LVET, association of LVET with outcomes, mechanisms behind shortened LVET in HFrEF and the potential implications of drugs that affect and normalize LVET.
+
+### Left Ventricular Ejection Time Derived From the Common Carotid Artery Doppler Waveform: Association With Left Ventricular Ejection Fraction and Prediction of Heart Failure
+- **Authors:** Polak JF, Alessi-Chinetti JM, Estes JM, Patel AR
+- **Year / venue / type:** 2015 / Journal of ultrasound in medicine : official journal of the American Institute of Ultrasound in Medicine / journal article
+- **DOI:** 10.7863/ultra.34.7.1237
+- **URL:** https://doi.org/10.7863/ultra.34.7.1237
+- **Stance:** supports
+- **Owner has it:** no
+- **Found by:** time interval outcomes
+- **Metadata source:** PubMed 26112626
+- **Claude's note:** Closest to carotid radar output: ejection time from the carotid Doppler waveform, AUC 0.81 for EF under 40%, 110 patients.
+
+**Abstract:** OBJECTIVES: Left ventricular ejection time (LVET) is measured from blood pressure tracings as the interval from end diastole to the dicrotic notch and shows associations with left ventricular ejection fraction (LVEF) and heart failure. LVET can be measured on common carotid artery Doppler waveforms. We therefore studied the possible associations of common carotid artery LVET with LVEF measured by echocardiography and heart failure.
+
+METHODS: We performed a retrospective study of 110 patients who had transthoracic echocardiography and carotid Doppler evaluations within 1 day of each other. LVEF was determined by the biplane modified Simpson method. LVET was measured from left common carotid artery Doppler tracings. Linear regression was used to evaluate associations between LVET and LVEF. We also used logistic regression with LVEF of less than 40% as a cut point for heart failure to generate a receiver operating characteristic curve, estimate the area under the curve, and calculate sensitivity and specificity.
+
+RESULTS: LVET was associated with LVEF (P < .0001). The area under the curve of LVET for heart failure was 0.81 (95% confidence interval [CI], 0.72-0.87), and the sensitivity and specificity were 76.9% (95% CI, 65.4%-88.4%) and 65.5% (95% CI, 53.4%-77.8%), respectively, for LVET of 321 milliseconds.
+
+CONCLUSIONS: LVET measured on common carotid artery Doppler tracings decreases with LVEF and is strongly associated with prevalent heart failure. Based on what is known of blood pressure-measured LVET, common carotid artery Doppler waveform-derived LVET could be used to serially monitor cardiac function.
+
+### A critical review of the systolic time intervals
+- **Authors:** Lewis RP, Rittogers SE, Froester WF, Boudoulas H
+- **Year / venue / type:** 1977 / Circulation / Research Support, U.S. Gov't, P.H.S.
+- **DOI:** 10.1161/01.cir.56.2.146
+- **URL:** https://doi.org/10.1161/01.cir.56.2.146
+- **Stance:** qualifies
+- **Owner has it:** no
+- **Found by:** time interval outcomes
+- **Metadata source:** PubMed 872305
+- **Claude's note:** Older critical review. Intervals vary with heart rate and need correction.
+
+**Abstract:** The theoretical basis for the use of the systolic time intervals has been largely established. The method has been validated by direct measures from within the circulatory system. Standards for equipment and technique have been defined. Numerous clinical studies have demonstrated the value of this quantitative noninvasive technique for assessing left ventricular performance. At present there is need for further studies of the clinical usefulness of the systolic time intervals to improve both diagnosis and therapy of various cardiovascular disorders.
+
+### Left Ventricular Systolic Ejection Time is an Independent Predictor of All-Cause Mortality in Heart Failure with Reduced Ejection Fraction
+- **Authors:** not retrieved
+- **Year / venue / type:** 2021 / European Journal of Heart Failure / journal article
+- **DOI:** 
+- **URL:** https://academic.oup.com/eurjhf/article/23/2/240/8377779
+- **Stance:** supports
+- **Owner has it:** no
+- **Found by:** time interval outcomes
+- **Metadata source:** publisher page via Exa
+- **Claude's note:** Carotid-relevant interval, but measured by echo. 997 HFrEF patients, adjusted HR 1.06 per 10 ms decrease.
+
+**Abstract:** Aims: Colour tissue Doppler imaging (TDI) M-mode through the mitral leaflet is an easy and precise method to obtain cardiac time intervals including isovolumic contraction time (IVCT), isovolumic relaxation time (IVRT) and systolic ejection time (SET). The myocardial performance index (MPI) is defined as [(IVCT + IVRT)/SET]. Whether cardiac time intervals obtained by the TDI M-mode method can be used to predict outcome in patients with heart failure with reduced ejection fraction (HFrEF) remains unknown.
+
+Methods and results: A total of 997 patients with HFrEF (mean age 67 ± 11 years, 74% male) underwent an echocardiographic examination including TDI. During a median follow-up of 3.4 years (interquartile range 1.9–4.8 years), 165 (17%) patients died. The risk of mortality increased by 9% per 10 ms decrease in SET [per 10 ms decrease: hazard ratio (HR) 1.09, 95% confidence interval (CI) 1.06–1.13; P < 0.001]. The association remained significant even after multivariable adjustment for clinical and echocardiographic parameters (per 10 ms decrease: HR 1.06, 95% CI 1.01–1.11; P = 0.030). The MPI was a significant predictor in an unadjusted model (per 0.1 increase: HR 3.06, 95% CI 1.16–8.06; P = 0.023). However, the association did not remain significant after multivariable adjustment. No significant associations between IVCT or IVRT and mortality were found in unadjusted nor adjusted models. Additionally, SET provided incremental prognostic information with regard to predicting mortality when added to established clinical predictors of mortality in patients with HFrEF.
+
+Conclusion: In patients with HFrEF, SET provides independent and incremental prognostic information regarding all-cause mortality.
+
+### Association Between Systolic Ejection Time and Outcomes in Heart Failure by Ejection Fraction
+- **Authors:** not retrieved
+- **Year / venue / type:** 2020 / European Journal of Heart Failure / journal article
+- **DOI:** 
+- **URL:** https://academic.oup.com/eurjhf/article/22/7/1174/8385219
+- **Stance:** qualifies
+- **Owner has it:** no
+- **Found by:** time interval outcomes
+- **Metadata source:** publisher page via Exa
+- **Claude's note:** Measured by echo. Longer ejection time linked to better outcome in HFrEF but not HFpEF.
+
+**Abstract:** Aims: Worsening heart failure (HF) is associated with shorter left ventricular systolic ejection time (SET), but there are limited data describing the relationship between SET and clinical outcomes. Thus, the objective was to describe the association between SET and clinical outcomes in an ambulatory HF population irrespective of ejection fraction (EF).
+
+Methods and results: We identified ambulatory patients with HF with reduced EF (HFrEF) and HF with preserved EF (HFpEF) who had an outpatient transthoracic echocardiogram performed between August 2008 and July 2010 at a tertiary referral centre. Multivariable logistic regression was used to evaluate the association between SET and 1-year outcomes. A total of 545 HF patients (171 HFrEF, 374 HFpEF) met eligibility criteria. Compared with HFpEF, HFrEF patients were younger [median age 60 years (25th–75th percentiles 50–69) vs. 64 years (25th–75th percentiles 53–74], with fewer females (30% vs. 56%) and a similar percentage of African Americans (36% vs. 35%). Median (25th–75th percentiles) EF with HFrEF was 30% (25–35%) and with HFpEF was 54% (48–58%). Median SET was shorter (280 ms vs. 315 ms, P < 0.001), median pre-ejection period was longer (114 ms vs. 89 ms, P < 0.001), and median relaxation time was shorter (78.7 ms vs. 93.3 ms, P < 0.001) among patients with HFrEF vs. HFpEF. Death or HF hospitalization occurred in 26.9% (n = 46) HFrEF and 11.8% (n = 44) HFpEF patients. After adjustment, longer SET was associated with lower odds of the composite of death or HF hospitalization at 1 year among HFrEF but not HFpEF patients.
+
+Conclusion: Longer SET is independently associated with improved outcomes among HFrEF patients but not HFpEF patients, supporting a potential role for normalizing SET as a therapeutic strategy with systolic dysfunction.
 

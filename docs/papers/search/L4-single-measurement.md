@@ -313,7 +313,7 @@ CONCLUSION: The presence and extent of JVD and lower extremity edema, and a posi
 
 ### Role of Internal Jugular Venous Ultrasound in suspected or confirmed Heart Failure: A Systematic Review
 - **Authors:** Rahul Chaudhary, Ajaypaul Sukhi, Marc A. Simon, Flordeliza S. Villanueva, John J. Pacella
-- **Year / venue / type:** 2021 / Journal of Cardiac Failure / systematic review
+- **Year / venue / type:** 2022 / Journal of Cardiac Failure / systematic review
 - **DOI:** 10.1016/j.cardfail.2021.08.009
 - **URL:** https://onlinejcf.com/article/S1071-9164(21)00346-8/abstract
 - **Stance:** supports
@@ -328,7 +328,7 @@ Methods: We performed electronic searches on PubMed, The Cochrane Library, EMBAS
 
 Results: A total of 11 studies were eligible for final analysis (n = 1481 patients with HF). The studies were segregated into 3 groups: (1) the evaluation of patients presenting to the emergency department with dyspnea, (2) the evaluation of patients presenting to the HF clinic for follow-up, and (3) the evaluation of hospitalized patients with acutely decompensated HF or undergoing right heart catheterization. US parameters included IJV height, IJV diameter, IJV diameter ratio, IJV cross-sectional area, respiratory compressibility index, and compression compressibility index.
 
-Conclusions: The findings of this systematic review suggest a significant role for ultrasound interrogation of the IJV in evaluation of patients in the emergency department presenting with dyspnea, in the outpatient clinic for poor clinical outcomes in HF, and in determining the timing of discharge for patients admitted with acutely decompensated HF. Further studies are warranted for testing the reliability of the reported ultrasound indices. (truncated at source extract: Results section may omit a sentence)
+Conclusions: The findings of this systematic review suggest a significant role for ultrasound interrogation of the IJV in evaluation of patients in the emergency department presenting with dyspnea, in the outpatient clinic for poor clinical outcomes in HF, and in determining the timing of discharge for patients admitted with acutely decompensated HF. Further studies are warranted for testing the reliability of the reported ultrasound indices.
 
 ### Jugular Venous Response for Risk Stratification in Heart Failure
 - **Authors:** Noguchi M, Kasai K, Honda S, Sakai C, Harimoto K, Kawasaki T

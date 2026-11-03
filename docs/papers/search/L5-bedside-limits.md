@@ -99,16 +99,16 @@ TRIAL REGISTRATION: ClinicalTrials.gov public (identifier NCT03815188).
 
 ### Advances in Congestion Assessment in Decompensated Heart Failure
 - **Authors:** Archana Ganapathy, Jason N Dungu, Anthony D Dimarco, Andrew Madu, Brian Li, Samantha Langley et al.
-- **Year / venue / type:** 2025 /  / journal page
+- **Year / venue / type:** 2025 / Cardiac Failure Review / review
 - **DOI:** 
 - **URL:** https://www.cfrjournal.com/articles/advances-congestion-assessment-decompensated-heart-failure
 - **Stance:** supports
 - **Owner has it:** no
 - **Found by:** bedside accuracy
 - **Metadata source:** publisher page meta
-- **Claude's note:** Review: 217 ADHF patients, sensitivity 57.3% and specificity 43.6%. Find the primary study.
+- **Claude's note:** Review. Page extract gives 217 ADHF patients, sensitivity 57.3%, specificity 43.6%. Find the primary study.
 
-**Abstract:** Explore the latest advancements in quantifying congestion in decompensated heart failure to improve patient outcomes and management.
+**Abstract:** abstract not retrieved
 
 ### Central venous pressure estimation with force-coupled ultrasound of the internal jugular vein
 - **Authors:** Jaffe A, Goryachev I, Sodini C, Anthony BW
