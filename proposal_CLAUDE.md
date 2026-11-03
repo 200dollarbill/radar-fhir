@@ -1,179 +1,161 @@
-# CLAUDE.md: Thesis Handoff (FHIR Profile for RADAR JVP Device Interoperability)
+# Thesis Handoff: CDSS for RME, RADAR JVP and 12-Lead ECG
 
-Read this first. It records the thesis direction as it stands (as of 2026-10-19), what has been drafted, what is wrong or unverified in the draft, the evidence gathered, and the fishbone plan. Anything marked **TODO-verify** has not been confirmed.
+Read this before thesis work. It records the current direction (as of 2026-11-03), scope, urgency argument, what is wrong or unverified in the draft, and open questions. Anything marked **TODO-verify** has not been confirmed. The draft itself is `docs/proposal_md/proposal.md`; if the two disagree on content, check the draft and update this file.
 
 ---
 
 ## 1. Project in One Paragraph
 
-The student is writing a final-year thesis (tugas akhir, **in Indonesian**) in collaboration with a Biomedical Engineering RADAR research group. The group's device measures the **jugular venous pulse (JVP)** non-invasively and contactlessly with radar (FMCW / Doppler, I/Q signals). The device takes **time-interval measurements of the JVP, carotid artery and internal jugular vein (IJV)**. The student's contribution is the **interoperability layer**: a FHIR R4 profile, aligned with SATUSEHAT, that represents the device's measurement output (signals, derived features, interpretation status, device metadata), plus a full-stack reference implementation that proves the profile works end to end on real measurement data.
+The student is writing a final-year thesis (tugas akhir, **in Indonesian**) with a Biomedical Engineering RADAR research group whose device measures the **jugular venous pulse (JVP)** non-invasively and contactlessly. The student builds the system on top of the device output: it takes RADAR measurement results, combines them with patient context from electronic medical records (RME), and uses a 12-lead ECG as a reference point, to support a doctor's clinical decisions.
 
-**Title (decided, not changing anymore):**
-*Pengembangan Profil Fast Healthcare Interoperability Resource (FHIR) Untuk Interoperabilitas Perangkat RADAR Pendeteksi Jugular Vein Pulse*
+**Working title (not final):**
+*Pengembangan Sistem Pendukung Keputusan Klinis Berbasis Interoperabilitas Data Rekam Medis Elektronik dan Pengukuran Kardiovaskular RADAR*
+
+**Final objective:** a working website that takes in RME, RADAR JVP and 12-lead ECG data and displays it visually and efficiently in one view for the doctor.
+
+**Next phase:** literature deepening to strengthen the justification and urgency, JVP signal link to cardiovascular health first. Spec: `docs/.superpowers/specs/2026-11-03-literature-deepening-design.md`. Results: `docs/papers/search/`.
 
 ---
 
-## 2. Direction History (so the next session does not re-litigate)
+## 2. Direction History (so the next session does not relitigate)
 
-1. **Version 1:** FHIR profile for the RADAR JVP device (the current direction).
-2. **Professor's critique (2026-10-13):** the device is a *measurement* tool, not a *monitoring* tool, so there is little urgency for FHIR standardization. His analogy: like a thermometer, one reading does not need a FHIR environment. He suggested a higher level of health analytics.
-3. **Version 2 (explored, 2026-10-14 to 10-16):** context-aware clinical decision support / interpretation system over RME + RADAR data. Explored in depth, including an urgency argument and verified JVP literature.
-4. **Decision (2026-10-19): the student returns to Version 1** (title and topic unchanged). The Version 2 work is kept only as supporting material for the urgency argument and the clinical background. **Do not rewrite the thesis around decision support.**
+**Current direction: CDSS. Versions below are superseded.**
 
-**Open risk:** the professor has not accepted the urgency of Version 1. The defense in section 5 must be prepared before the next meeting.
+1. **FHIR profile for the RADAR JVP device.** Superseded.
+2. **Professor's critique (2026-10-13):** the device is a *measurement* tool, not a *monitoring* tool, so there is little urgency for FHIR standardization. His analogy: one thermometer reading does not need a FHIR environment. He suggested a higher level of health analytics.
+3. **Context-aware decision support explored (2026-10-14 to 10-16).**
+4. **Brief return to the FHIR profile (2026-10-19).** Superseded.
+5. **CDSS adopted (`proposal.md`, 2026-10-26; confirmed by the student 2026-11-03).** The profile work survives only as the interoperability layer inside the system.
+
+**Open risk:** the professor's objection still needs an evidence-backed answer. See section 5.
 
 ---
 
 ## 3. Scope Boundary
 
 - **RADAR group's work:** device, signal acquisition, I/Q processing, detection and quantification of pulses and intervals.
-- **Student's work:** everything after the quantified output: mapping to FHIR, profile design (StructureDefinition, IG), SATUSEHAT-aligned resource design, ingestion, validation, role-based full-stack system (patient, doctor, admin), round-trip integrity testing.
-- **Out of scope (state as limits):** signal-processing algorithms, clinical validation of the device, usability testing, hospital deployment, hosted connection to the live SATUSEHAT platform (BAB II already says the discussion is limited to profile compatibility, not hosted connection; **check this is consistent with the batasan masalah**).
-- **TODO (ask the RADAR group):** exact output fields per session (interval definitions, waveform samples or timings only, sampling rate), number of subjects and sessions, repeated measures, any reference measurement (echo, catheter, clinical exam), intended use setting (outpatient, post-discharge, bedside), any hospital or ethics partner.
+- **Student's work:** the system after the quantified output: data intake, mapping RADAR, ECG and RME to FHIR as the canonical format, data management, and the integrated display.
+- **Required:** the integrated display. It is the decision support; the doctor decides. Source [38] supports this reading: adopted CDSS are mostly assistive and present a synthesis.
+- **Optional only if time remains:** rule-based flags or recommendations.
+- **Limits:** RME data is synthetic or test data, because real data needs ethics approval. Output is not diagnosis, prediction or a validated risk score, and is not clinically validated. No signal-processing or interpretation algorithm contribution. No hosted SATUSEHAT connection. No usability study or hospital deployment.
+- **Existing base:** the local FHIR R4 walking-skeleton server. See `CLAUDE.md`.
+- **Not designed yet:** the website architecture, including ECG intake. It gets its own brainstorm after the literature phase.
+- **TODO (ask the RADAR group):** exact output fields per session (interval definitions, waveform samples or timings only, sampling rate), number of subjects and sessions, intended use setting.
 
 ---
 
-## 4. Fishbone Plan (cause-and-effect diagram)
+## 4. Fishbone
 
-**Fishbone logic:** the head is the problem; each bone is a *cause category* explaining why the problem exists, not just a topic heading. Phrase every bone as a cause.
-
-**Head (effect):** RADAR JVP measurement output cannot be recorded in RME or exchanged through SATUSEHAT in a standard, semantically consistent way.
-
-### Student's original four bones
-1. **FHIR system** (resources, REST, profiling, IG, validation tools)
-2. **Peraturan Kemenkes & UU** (Permenkes 24/2022, Kepmenkes HK.01.07/Menkes/1423/2022, UU 17/2023)
-3. **RADAR for JVP and RADAR as wearable/portable device** (note: the student said "three" but listed four items)
-4. **Interoperability as the main benefit in IoT devices**
-
-### Suggested additional bones (to cover "almost all relevant material")
-| # | Bone (cause) | Sub-branches | Why add it |
-|---|---|---|---|
-| 5 | **Clinical context of JVP and cardiovascular disease** (urgency) | HF rehospitalization burden; invasive CVP vs bedside exam vs non-invasive sensing; why spot measurements still enter RME | Answers the professor's urgency objection; currently missing from the background |
-| 6 | **Terminology and coding gap** (semantic interoperability) | ICD, SNOMED CT, LOINC; UCUM units; absence of a standard code for radar JVP/carotid/IJV intervals (**TODO-verify**) | The draft names the standards but not the specific gap |
-| 7 | **Device-output data modelling** | Raw signal vs derived features vs interpretation; Observation (component), DiagnosticReport, Device, Provenance; sampled-data representation; time/interval semantics | This is the core design problem of the profile |
-| 8 | **Data quality, provenance and measurement conditions** | Radar-subject distance, motion, posture, SNR; device identity, firmware, algorithm version; flagged-unreliable status | Related work shows RADAR output needs context metadata to be reusable |
-| 9 | **PGHD in RME** | PGHD benefits (engagement, QoL, reduced worry); clinician trust; integration into workflow | Already in P1 of the draft; promote to its own bone |
-| 10 | **Security, privacy and data governance** | UU PDP 27/2022, PP 71/2019 (**TODO-verify**), SATUSEHAT OAuth 2.0, no uniform access control across institutions (IOTA paper), consent | Health data; regulators and examiners will ask |
-| 11 | **Medical-device regulatory status** | Alat kesehatan registration, research-prototype status, why outputs are framed as measurements not diagnoses (**TODO-verify** applicable Indonesian rules) | Explains scope limits honestly |
-| 12 | **Implementation and validation methodology** | FSH/SUSHI, IG Publisher, HL7 FHIR Validator, round-trip testing, role-based dashboards, source adapters; validator pass is not clinical correctness | Defines how the contribution is measured |
-| 13 | **Related work and gap** | ISO/IEEE 11073-10207 to FHIR IG; SATUSEHAT ECG IG (Chaidir and Hareva); FHIR biosignal framework; RADAR-IoT; Garmin to FHIR; radar vital-sign systems | Draws the boundary of novelty |
-
-**Recommendation:** a readable fishbone has about 6 to 8 main bones. Suggested grouping if it gets crowded: merge 7+8 ("data modelling and quality"), merge 10+11 ("regulation, privacy and device status" under bone 2), and keep 9 as a sub-branch of bone 4. That leaves bones 1, 2, 3, 4, 5, 6, 7, 12, 13 (or fewer).
-
-### Mapping to BAB II headings (current draft)
-- Interoperabilitas Data Kesehatan -> bones 4, 6, 9
-- Layer Interoperabilitas FHIR -> bone 1
-- SATUSEHAT Sebagai Standar Nasional -> bone 2 (add bone 10/11 content)
-- Pembuatan dan Validasi Profil FHIR -> bones 7, 12
-- Monitoring Kesehatan Berbasis RADAR -> bone 3 (rename heading, see section 6; add bones 5 and 8)
-- Penelitian Terkait dan Kesenjangan -> bone 13
-- **Missing subsections:** clinical JVP context (bone 5), terminology gap (bone 6), security and privacy (bone 10).
+The current fishbone is `docs/presentation/ets/fishbone.md`, with the head: RADAR JVP data, RME context and 12-lead ECG are not connected, so the doctor cannot easily assess congestion in one view. Any `.svg` fishbone in the repo is generated from that file, which remains the source. Items marked (?) there are unverified.
 
 ---
 
-## 5. Urgency Defense (for the professor)
+## 5. Urgency Argument
 
-**Concede first:** the device is a *point-of-care measurement* device, not a continuous monitoring device. The student previously answered "monitoring", which weakened the argument. The thesis must not depend on long-term monitoring.
+**Concede first:** the device is a point-of-care measurement device. The thesis must not depend on long-term monitoring.
 
-**Arguments:**
-1. **Spot measurements still enter RME.** A single blood pressure reading is also a spot measurement, yet it is recorded as a structured Observation. The need is not continuity but structured, interpretable, exchangeable recording.
-2. **JVP output is not a single scalar.** It is waveform-derived time intervals across JVP, carotid and IJV, with measurement conditions. There is no ready code or profile for it, so each integration would be ad hoc.
-3. **A thermometer reading has a universal reference range; these intervals vary between patients.** They only become meaningful when stored with patient context, quality information and device provenance, which is exactly what a profile enforces.
-4. **Interoperability is a precondition for validation.** The correlation between radar intervals and clinical status is not established. A standard representation lets future studies pair measurements with RME data (diagnoses, labs, medications). State this as a precondition, not as present demand.
-5. **The device itself is not the thesis.** Whether a contactless method should exist is the RADAR group's justification. The thesis starts after the measurement exists.
+The argument is a chain. A weak link weakens everything after it. The literature phase tests each link, and `docs/papers/search/README.md` holds the strength assessment once written.
 
-**Honest weakness:** the device is a research prototype, so the need is anticipatory. Do not overclaim urgency.
+| Link | Claim | Current support |
+|---|---|---|
+| L1 | Heart failure burden and readmission are high | [1] to [4]; Indonesian HF-specific figure still missing |
+| L2 | Residual congestion drives readmission; venous pressure rises before symptoms | [4], [31], [32] |
+| L3 | JVP waveform features carry cardiovascular information beyond a single height value | [7] only. **Weakest and highest priority** |
+| L4 | A single measurement at discharge or in clinic has value. Answers the thermometer objection | [13]; [12] argues against. **Highest priority** |
+| L5 | Bedside assessment is limited, so objective measurement is needed | [6], [8]; two-object-method figures still marked `[new]` |
+| L6 | RADAR captures those features, not only the pulse | [6], [10]; small feasibility studies |
+| L7 | JVP is only meaningful with context, so combining it with RME and ECG is justified | [7], [12], [14], [15] |
+| L8 | Integrated display helps clinicians | [36] to [38] |
 
-**Factual correction for the professor (he believed JVP is only invasive or PPG):** three levels exist: (a) invasive CVP via catheter (gold standard); (b) bedside clinical exam (non-invasive but subjective); (c) newer non-invasive sensing (camera, PPG, ultrasound, radar).
+**Answer to the thermometer analogy:** a thermometer reading has a universal reference range, while JVP is a waveform whose reading varies between patients and only means something alongside their context. This depends on L3, L4 and L7 holding up.
 
----
+**Honest weaknesses, do not overclaim:**
+- The device is a research prototype, so the need is partly anticipatory.
+- No evidence found so far that radar yields calibrated pressure (cmH2O). Do not imply it replaces CVP.
+- Das [6] is a small feasibility study with one catheter comparison.
+- [12] is real counter-evidence. Present it, then show why context answers it.
 
-## 6. Thesis Document Status
-
-Department guideline for the proposal:
-- **Rumusan masalah:** declarative or question form, gap between current and desired state, avoid many questions.
-- **Batasan masalah:** optional, with reasons.
-- **Tujuan dan manfaat:** "untuk ..." goals, SMART; manfaat names the design/method/prototype produced.
-- **Kontribusi:** useful results for specific fields.
-
-**Format preferences:** batasan, rumusan, tujuan/manfaat and kontribusi are **flowing paragraphs, not lists**; kontribusi is **one short paragraph, broad strokes**. Rumusan ends with "Dibutuhkan ..." rather than numbered questions.
-
-### Draft contents (latar belakang, as of 2026-10-19)
-- P1: scale of Indonesian clinical data (280 million people, 2,770 hospitals, 10,300 puskesmas [1]; BPJS 1.2-1.4 million visits per day in 2026; Permenkes 24/2022); PGHD is part of RME [2]; PGHD benefits [3][4].
-- P2: PGHD needs standardization; ICD, SNOMED CT, LOINC; need for a connector [5].
-- P3: HL7 FHIR on REST API [6].
-- P4: SATUSEHAT on FHIR R4, identifiers NIK, IHS number, Nomor RM [7][8]; Kepmenkes 1423/2022 [9]; UU 17/2023 [10].
-- P5: wearable and portable devices generate PGHD, multi-parameter modalities [11].
-- P6: RADAR via Doppler/backscatter, contactless; radar data as PGHD; standardized recording needed for SATUSEHAT interoperability [12].
-- Rumusan, batasan, tujuan/manfaat, kontribusi: written around the FHIR profile plus full-stack reference implementation (validator pass target, round-trip integrity). BAB II drafted with six sections; Tabel 2.1 (related work comparison) is still empty.
-
-### Issues found in the current draft (fix list)
-1. **"Monitoring" wording conflicts with the professor's point and with the device.** "perangkat monitoring berbasis RADAR" appears in rumusan, tujuan, kontribusi and BAB II heading "Monitoring Kesehatan Berbasis RADAR"; P5-P6 also say "monitoring kontinu". Replace with "pengukuran" / "perangkat pengukuran berbasis RADAR" for the JVP device. Keep "wearable/portable" only as general background, and state that this device is a spot-measurement device.
-2. **No JVP clinical context in the latar belakang.** JVP is never explained (right atrial pressure, heart failure). Add a paragraph (bone 5).
-3. **"Undang Undang PERMENKES No. 24 Tahun 2022" is wrong** in the latar belakang (BAB II already says it correctly). Use "Peraturan Menteri Kesehatan (Permenkes) No. 24 Tahun 2022 tentang Rekam Medis".
-4. **Terminology:** "data hasil citra RADAR" -> "data hasil pengukuran/sensing RADAR" (not imaging); "pergerakan akustik micro" -> "mikro-gerakan" (mechanical, not acoustic); "Rekaman Medis Elektronik" -> "Rekam Medis Elektronik"; "Salahsatu" -> "Salah satu".
-5. **Citation numbers may collide across sections:** [5] is used for PGHD standardization (latar belakang P2) and for a systematic review of FHIR in research (BAB II); [6] is used for HL7 FHIR (P3) and for the FHIR biosignal framework (BAB II); [12] is used for radar backscatter (P6) and for the Schellenberger dataset (BAB II); [4] is used for PGHD benefits and for Garmin-FHIR. **TODO-verify** that these are the same sources or renumber.
-6. **Kepmenkes 1423/2022 is described two different ways** ("pengembangan sistem elektronik dalam ekosistem alat medis berbasis SSP" vs "pedoman variabel dan metadata RME"). **TODO-verify** the actual title and subject.
-7. **Statistics in P1** (hospital counts, BPJS visits) need verified sources, and "2026" visit figures need checking.
-8. **"Diagnosis" definition of health technology** (UU 17/2023) is quoted loosely; **TODO-verify** the exact wording.
-9. **Latar belakang P6 says radar data "dapat divalidasi dan digunakan oleh pekerja klinis"**; the device is not clinically validated. Soften to "berpotensi".
-10. **Batasan vs BAB II:** the batasan says the profile is generalizable to other RADAR devices but proof is limited to one device; keep this wording consistent in rumusan and kontribusi.
+**Factual correction for the professor (he believed JVP is only invasive or PPG):** three levels exist: invasive CVP via catheter, bedside exam, and newer non-invasive sensing (camera, PPG, ultrasound, radar).
 
 ---
 
-## 7. Evidence Gathered (JVP clinical context, verified via search on 2026-10-16)
+## 6. Draft Status and Fix List
 
-**Invasive CVP (catheter):** gold standard but time-consuming, impractical in pre-hospital settings, with risks including infection, catheter-induced thrombosis and arrhythmias (Medical Devices: Evidence and Research, VenCoM paper). Invasive measurement guides treatment in hospital but is impractical after discharge (PMC10898581). CVP is a poor static marker; trend is more useful than a single reading (MDedge pitfalls review).
+**State of `proposal.md`:** BAB I and BAB II drafted, 2.6 empty, BAB III not written. Presentation outline: `docs/presentation/ets/outline_sidang_proposal_v2.md`. BAB II blueprint: `docs/proposal_md/bab2_outline.md`.
 
-**Bedside exam:** less reliable due to human limitations (PMC10898581). Blinded catheter comparison: correlation with CVP 0.57 (external JVP) and 0.50 (internal JVP), CVP often underestimated (Deol et al., Chest 2011, PMID 20798190). Catheter studies show inconsistent correlation (PMC6181725). Difficulties: neck adiposity, anatomical variability, positioning (radar feasibility paper). **Counterpoint:** expert HF clinicians estimate right atrial pressure reasonably well from JVP (PMC2744520). Do not call the exam useless; say operator-dependent and hard to standardize.
+**Open items. Record only: the student edits the draft.**
 
-**Non-invasive sensing:** handheld ultrasound had a higher imaging success rate than visual inspection but obesity still reduced accuracy (Wang et al., Ann Intern Med 2021, via Clinician.com summary). IJV ultrasound shows inter-observer variability for some parameters (Italian Journal of Medicine, 2026). A device paper states there is a lack of non-invasive methods accurate enough to replace invasive CVP and easy enough for routine outpatient and home use.
-
-**Radar feasibility (closest to the device):** 60 GHz FMCW study (PMC12187424; preprint on medRxiv 2024.06.04.24308313). Validated morphology against simultaneous PPG and compared with previously recorded catheter data from **one** early-stage HF patient. Not validated against CVP. **TODO-verify** journal and peer-review status (figshare supplementary suggests Royal Society Open Science, article 242231). Radar yields pulsation waveforms and timings; **no evidence found that it yields calibrated pressure (cmH2O)**, so do not imply it replaces CVP.
-
-**Link to cardiovascular disease (heart failure):**
-- Rehospitalization after HF admission: up to 50% in six months (PMC10898581) and 30-60% (PMC2744520); cite the range.
-- Residual congestion is a target to prevent readmission (Cardiac Failure Review 2025, PMC11959577).
-- Elevated JVP was the only congestion sign independently associated with 60-day HF rehospitalization, HR 1.64, in 1,551 patients (ESC Heart Failure).
-- Congestion score (including JVP) associated with mortality and rehospitalization (Am J Cardiol, Duke record).
-- **Counterweight:** propensity-matched study (Meyer et al., Am J Cardiol 2009, PMID 19268742): elevated JVP is a marker of higher illness burden with no intrinsic association with mortality or HF hospitalization after matching. Supports reading JVP with context, not alone.
-
-**Not found / still open:** Indonesian heart failure burden figure; any radar JVP plus RME/patient-context fusion work (absence claim, **TODO-verify** with a targeted search before asserting).
-
-**Source caveats:** several items are preprints, trial pages or abstracts; check peer-review status and dates. Do not cite patents or SlideShare decks that surfaced in searches.
+1. **Output framing conflict.** 1.4 says "kelengkapan pemetaan dan diagnosa penyakit kardiovaskular", while 1.3 and 2.7 say the output is not a diagnosis.
+2. **Recommendations.** 2.7 says "Seluruh luaran rekomendasi". Soften to match the display-first objective.
+3. **Possible number error.** 1.1 says "10,9% pasien dirawat ulang dalam 30 hari dan 27% dalam enam bulan", while BAB II gives "mortalitas enam bulan 27,66%" from the same source [3]. The fishbone also marks this "cek angka". Check against the paper.
+4. **Clinical wording.** 1.1 says "Gagal jantung berupa salah satu gejala fisiologis yang umum ditemukan dari stroke dan IHD". Heart failure is a syndrome, not a symptom, and the stroke link needs a source.
+5. **Terminology.** 1.1 still says "pergerakan akustik jantung". The motion is mechanical.
+6. **Placeholders.** `[new]` in 1.1; "Survey oleh cite"; "terbuktikan oleh cite"; "Studi oleh di RSUD"; "Survei lintas Puskesmas oleh mencatat"; `[cite: ...]` markers; the citation-repair notes at the end of the file.
+7. **Missing content.** 2.6 is `[diisi mahasiswa]`, and BAB III is not written.
+8. **PGHD definition.** 1.1 says "diluar kunjungan klinis", but data collection is planned in a polyclinic. Decide whether RADAR data counts as PGHD here. The same paragraph also says "alat monitoring", which is acceptable only as general PGHD background.
+9. **Patient features.** 2.7 says the platform facilitates patients "menyimpan dan membagikan data". The supervisor has not confirmed this is committed.
+10. **Source [12].** 1.1 calls it "Suatu studi meta analisis", while the source catalogue calls it a propensity-matched study by Drazner et al. and an earlier note names Meyer et al., Am J Cardiol 2009, PMID 19268742. The repair notes say the citation is mixed. Identify the actual paper.
 
 ---
 
-## 8. FHIR / SATUSEHAT Background
+## 7. Evidence Gathered Before the Literature Phase (2026-10-16)
 
-- **FHIR R4** (HL7): REST API, JSON/XML resources; profiling constrains resources via `StructureDefinition`; IGs package profiles. Tools: FSH/SUSHI, IG Publisher, HL7 FHIR Validator.
-- **SATUSEHAT** (DTO Kemenkes): FHIR R4 IG on Simplifier.net; KEMENKES `Observation` profile `https://fhir.kemkes.go.id/r4/StructureDefinition/Observation`; mandatory resources include Organization, Patient, Practitioner, Encounter, Condition (Observation conditional); auth via OAuth 2.0 client credentials; identifiers NIK, IHS number, Nomor RM. Staging base: `https://api-satusehat-stg.dto.kemkes.go.id/fhir-r4/v1` (**TODO-verify** currency).
-- **Regulatory references to verify:** Permenkes 24/2022 (Rekam Medis), Kepmenkes HK.01.07/Menkes/1423/2022, UU 17/2023 (Kesehatan), UU PDP 27/2022, PP 71/2019. **TODO-verify** exact titles and relevance.
-- **Known SATUSEHAT limitation** (IOTA EMR access-control paper): works at data aggregation / interoperability level, no uniform access control across institutions.
-- **Indonesian fragmentation evidence:** IOTA EMR paper; HIS utilization across puskesmas (PMC); EMR recordkeeping culture (BMC Health Serv Res 2025); older HMA source on 400+ non-integrated government health apps.
-- **Profile-methodology papers:** FHIR IG creation scoping review (ScienceDirect 2024); Johner "Three Steps to Your Own Profile"; "FHIR Profiliferation" (medRxiv); MIMIC-IV on FHIR; MDPI open-source biosignal framework (valueSampledData precedent); FHIR/DICOMweb/SVG workflow (DiagnosticReport pattern).
-- **Related work in the draft:** Riech et al. (ISO/IEEE 11073-10207 to FHIR IG); Chaidir and Hareva 2025 (SATUSEHAT-compliant ECG IG); RADAR-IoT gateway; Garmin to FHIR integration; Suzuki et al. (microwave JVP); Das et al. (60 GHz JVP); Yen et al. (radar vital signs, elderly inpatients); Schellenberger et al. (clinical radar dataset); Shi et al. (carotid pulse, CW radar); JVP Doppler ultrasound review.
+From searches, not all read in full. New results go to `docs/papers/search/`.
 
----
+**Invasive CVP:** gold standard but impractical pre-hospital, with risks including infection, thrombosis and arrhythmia (VenCoM paper, Medical Devices: Evidence and Research). Impractical after discharge (PMC10898581). CVP is a poor static marker and trend is more useful (MDedge pitfalls review), which cuts against L4.
 
-## 9. Open Questions / Decisions
+**Bedside exam:** blinded catheter comparison, correlation with CVP 0.57 (external JVP) and 0.50 (internal JVP), CVP often underestimated (Deol et al., Chest 2011, PMID 20798190). **Counterpoint:** expert HF clinicians estimate right atrial pressure reasonably well (PMC2744520). Say operator-dependent and hard to standardize, not useless.
 
-- [ ] **Professor:** accepts the urgency argument (section 5)? Is the full-stack system plus profile enough contribution? Keep the three-role dashboard?
-- [ ] **RADAR group:** output fields, interval definitions, subjects and sessions, intended use setting, reference measurements.
-- [ ] Final fishbone: how many bones (section 4 recommends 6-8 after grouping).
-- [ ] Is there an existing LOINC/SNOMED code for JVP, carotid and IJV time intervals? If not, how will the profile handle codes (local CodeSystem)? **TODO-verify**.
-- [ ] Rewrite latar belakang to add JVP clinical context (bone 5) and remove "monitoring" framing.
-- [ ] Fix the section 6 issues list in the draft.
-- [ ] Fill Tabel 2.1 (related work comparison with gap column).
-- [ ] Draft metodologi chapter and system architecture diagram.
-- [ ] Verify: Permenkes and Kepmenkes titles, P1 statistics, "no study fuses radar JVP with EMR/RME", Indonesian HF burden figure.
+**Non-invasive sensing:** handheld ultrasound had a higher imaging success rate than inspection, but obesity still reduced accuracy (Wang et al., Ann Intern Med 2021, via a summary). IJV ultrasound shows inter-observer variability for some parameters (Italian Journal of Medicine, 2026).
+
+**Radar:** the 60 GHz FMCW study (PMC12187424; preprint medRxiv 2024.06.04.24308313) validated morphology against PPG, and compared with catheter data from **one** early-stage HF patient. **TODO-verify** journal and peer-review status.
+
+**Heart failure link:** elevated JVP was the only congestion sign independently associated with 60-day rehospitalization, HR 1.64, in 1,551 patients (ESC Heart Failure, **TODO-verify**). Rehospitalization up to 50% in six months (PMC10898581), 30 to 60% (PMC2744520).
+
+**Not found yet:** Indonesian heart failure burden figure; any radar JVP plus RME fusion work. Treat absence as "not found in searches", never as proof.
+
+**Source rules:** check peer-review status and dates. Do not cite patents or SlideShare.
 
 ---
 
-## 10. Working Preferences
+## 8. FHIR and SATUSEHAT Background
+
+- FHIR and SATUSEHAT facts live in `docs/reference/claude/` (start at `INDEX.md`). Do not restate them here.
+- **Role in the thesis:** canonical format so RADAR, ECG and RME can be read together. Chaidir and Hareva [20] is the Indonesian 12-lead ECG precedent. Riech [23] warns a syntactically valid profile does not guarantee semantic correctness.
+- **Regulation:** Permenkes 24/2022 [16], Kepmenkes HK.01.07/Menkes/1423/2022 [21], UU 17/2023 [22]. **TODO-verify:** UU PDP 27/2022 and PP 71/2019 relevance.
+- **Open:** whether LOINC or SNOMED codes exist for JVP, carotid and IJV time intervals. **TODO-verify.**
+
+---
+
+## 9. Research Logistics (consultation notes, 2026-10-15)
+
+Source: `docs/notul/konsultasi_15okt.txt`. Informal notes; confirm before relying on them.
+
+- Four students sit in one research tree: two on arrhythmia from pulse, one on JVP detection, and this thesis on the role-based informatics system.
+- Data collection is at Soetomo, in a polyclinic rather than inpatient. A general polyclinic was suggested as faster than the vascular one.
+- USG is the validator for JVP. The polyclinic has no equipment for measuring veins and arteries, so that work goes through the echo division.
+- Sample size discussed: 100 people, possibly more than one month in total.
+- Contacts: Dr. Ruth (arrhythmia and AFib, ECG focus); Dr. Irawati (echo division, controls the USG and samples); Dr. Kevin (vascular, performs or directs the venous work).
+
+---
+
+## 10. Open Questions
+
+- [ ] **Professor:** does the CDSS direction and display-first objective answer the critique? Is patient save-and-send committed?
+- [ ] **RADAR group:** output fields, interval definitions, subjects and sessions, reference measurements.
+- [ ] Is the data source for 12-lead ECG real or synthetic? The draft only states RME is synthetic.
+- [ ] Fill 2.6 and write BAB III, after the literature phase.
+- [ ] Work through the fix list in section 6.
+- [ ] Final title.
+
+---
+
+## 11. Working Preferences
 
 - Respond in the language the user writes in; thesis text is **Indonesian**. The user is casual in chat and sometimes mixes languages.
-- Drafts as **paragraphs**, concise; kontribusi short. Use bracketed placeholders (`[cite: ...]`, `[insert data: ...]`) instead of inventing figures.
-- Mark absence claims and uncertain facts as TODO-verify; keep thesis claims honest about limitations (single device, no clinical validation, no hosted SATUSEHAT connection).
-- Do not frame the thesis as diagnosis or decision support; the contribution is the interoperability profile and the reference implementation.
-- Quotes from sources: paraphrase; keep any quote very short.
+- Style, format and citation rules for proposal text: `docs/proposal_guide/panduan_proposal.md`. These include no hyphens, flowing paragraphs, IEEE citations and a short kontribusi.
+- Use bracketed placeholders (`[cite: ...]`, `[insert data: ...]`). Never invent figures.
+- Mark absence claims and uncertain facts as TODO-verify.
+- Frame the output as decision support, never as diagnosis, prediction or a validated risk score. Use "pengukuran" for the RADAR device.
+- Paraphrase sources; keep any quote very short.
+- The student reads papers before they enter the proposal. Search results do not go into `proposal.md` automatically.
