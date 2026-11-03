@@ -5,27 +5,37 @@ methodological basis you can draw on when writing your own proposal. It is a
 briefing source, not the proposal itself: formulate the research question,
 contribution, evaluation plan, and institutional framing in your own terms.
 
-**Project shorthand:** Pra-TA radar-based cardiac monitoring, wrapped in a
-local, SATUSEHAT-compatible FHIR R4 clinical-record server.
+**Project shorthand:** a clinical decision support system (CDSS) website that
+shows RME, RADAR JVP and 12-lead ECG data together for the doctor, built on a
+local, SATUSEHAT-compatible FHIR R4 server.
+
+**Direction note (2026-11-03):** the thesis moved from a FHIR profile for the
+RADAR device to this system. Current thesis material is
+`docs/proposal_md/proposal.md` and `proposal_CLAUDE.md`. Sections 2, 4 and 5
+below still describe the existing server accurately, and section 6 is now
+reference material for an optional profile.
 
 ## 1. Project goal and intended contribution
 
-The project is developing a **standalone, locally operated FHIR R4 server** for
-a device-assisted clinical workflow in Indonesian healthcare. The long-range
-goal has three connected parts:
+**Final objective:** a working website that takes in RME, RADAR JVP and 12-lead
+ECG data and displays it visually and efficiently in one view for the doctor.
+The integrated display is the decision support, and the doctor decides.
+Rule-based flags are not required, and are optional only if time remains.
 
-1. **Device-to-clinic data path:** a radar-derived vital sign—initially heart
-   rate / carotid pulse—can enter a FHIR record as a device-sourced
-   `Observation`.
+The existing **standalone, locally operated FHIR R4 server** is the base. It
+already proves three connected parts of the path:
+
+1. **Device-to-clinic data path:** a device-sourced value, currently a
+   placeholder heart rate, can enter a FHIR record as an `Observation`.
 2. **Clinician review:** a doctor opens an `Encounter`, receives measurements
    associated with that patient and visit, and can read them in context.
 3. **Patient access:** the patient can read their own record through a
-   role-scoped API (a web UI is a later phase).
+   role-scoped API.
 
-The differentiating standards contribution is not merely to serialize sensor
-values as JSON. It is to define the **resource semantics, terminology, profile
-constraints, provenance/device identity, and access boundaries** that make a
-new measurement device interoperable with a FHIR-based clinical workflow.
+The contribution is the system: data management, integration and
+interoperability. It is not the RADAR device or an interpretation algorithm.
+FHIR and SATUSEHAT are the bridge that lets the data sources be read together,
+not the headline contribution.
 
 **Important claim boundary:** the current server is a walking skeleton and
 research prototype. It is SATUSEHAT-compatible in selected profiles,
@@ -112,9 +122,9 @@ the chosen implementation rule and its rationale. Examples affecting design:
 
 The clinical motivation comes from the Pra-TA research direction on contactless
 jugular venous pulse (JVP) / carotid pulse measurement using radar. The repository
-contains related papers under `docs/papers/` (and earlier material under
-`PraTAPapers/` where present); cite the individual papers only after checking
-their methods, populations, limitations, and clinical claims directly.
+contains related papers under `docs/papers/`; cite the individual papers only
+after checking their methods, populations, limitations, and clinical claims
+directly.
 
 The present firmware is a **placeholder transport/demo**, not a validated
 signal-processing pipeline:
@@ -214,7 +224,10 @@ resource write; failed update leaves the prior resource unchanged.
   The method lesson: adversarially test the *actual boundary* (e.g. parse the
   literal firmware payload), not just the Python helper that mirrors it.
 
-## 6. Future profile-creation methodology
+## 6. Profile-creation methodology (optional under the current direction)
+
+A profile is no longer the thesis's headline goal. Use this section only if the
+website design needs one.
 
 A FHIR profile is a `StructureDefinition` with `derivation = constraint` over a
 base resource. It narrows the base; it cannot rename elements, add arbitrary
@@ -279,18 +292,22 @@ The checklist is method, not a pre-decided profile. A later design must decide:
 
 ### In progress / planned
 
-1. Public deployment and request-history UI behind Cloudflare Access + Tunnel,
-   nginx on loopback. Latest design: `docs/.superpowers/specs/2026-10-08-public-exposure-request-history-design.md`.
-2. Continuous WebSocket heart-rate stream with persisted sequence index and UTC
-   timestamps; gap detection, duplicate handling, reconnect replay.
-3. Formal Device and Observation profiles, extensions as needed, IG packaging.
-4. Web UI for clinician worklist and patient view.
-5. Broader Encounter/Condition/Procedure/Rawat Jalan resources, Bundles/PATCH,
-   organization hierarchy, profile-driven validation.
-6. Replace placeholder heart rate with validated radar-derived signal processing;
-   later decide SpO₂ terminology if the device expands.
-7. Operational production-hardening, privacy/security review, and clinical
-   validation (not implied by the walking skeleton).
+1. **Now:** literature deepening, JVP signal link to cardiovascular health first.
+   Spec: `docs/.superpowers/specs/2026-11-03-literature-deepening-design.md`.
+2. **Then:** design and build the website: data intake for RME, RADAR JVP and
+   12-lead ECG, and the integrated doctor view. Not designed yet.
+3. Connect real radar output in place of the placeholder heart rate, from the
+   RADAR group's quantified results.
+
+Possible later items, none required for the final objective:
+
+- Public deployment and request-history UI, spec written but not implemented:
+  `docs/.superpowers/specs/2026-10-08-public-exposure-request-history-design.md`.
+- Rule-based flags, if time remains.
+- Formal Device and Observation profiles, extensions, IG packaging.
+- Broader Encounter/Condition/Procedure resources, Bundles/PATCH.
+- Production hardening, privacy and security review, and clinical validation
+  (not implied by the walking skeleton).
 
 ## 8. Repository map and useful starting points
 
@@ -310,7 +327,8 @@ The checklist is method, not a pre-decided profile. A later design must decide:
 | Server run guide | `fhir_server/README.md` |
 | Server source/tests | `fhir_server/`, `tests/` |
 | Firmware and serial assumptions | `arduino/radar_json/README.md`, `arduino/radar_json/radar_json.ino` |
-| Research papers | `docs/papers/`, `PraTAPapers/` (verify/cite individual papers directly) |
+| Thesis handoff and draft | `proposal_CLAUDE.md`, `docs/proposal_md/proposal.md` |
+| Research papers | `docs/papers/` (verify/cite individual papers directly) |
 
 ### Verification commands
 
@@ -325,13 +343,12 @@ arduino-cli compile --fqbn m5stack:esp32:m5stack_cores3 arduino/radar_json
 
 Use this brief to draft your proposal; these are prompts, not claims to copy:
 
-1. **Problem statement:** what measurement problem does radar-based contactless
-   pulse/JVP monitoring address, for which clinical setting and population?
-2. **Research question:** are you evaluating signal-processing accuracy,
-   interoperability/profile design, workflow usability, or an integrated system?
-   Separate these objectives if necessary.
+1. **Problem statement:** what does connecting RADAR JVP measurement, RME context
+   and 12-lead ECG solve for the doctor, in which clinical setting and population?
+2. **Research question:** the system is the subject. Keep signal-processing
+   accuracy and clinical validation separate, as work outside this thesis.
 3. **Contribution:** what is novel relative to existing radar vital-sign work,
-   SATUSEHAT/FHIR integrations, and device profiles?
+   SATUSEHAT/FHIR integrations, and isolated CDSS?
 4. **Methods:** what hardware, signal-processing pipeline, reference instrument,
    participant protocol, clinical ground truth, statistical agreement metrics,
    and safety/ethics approvals are required?
