@@ -1,0 +1,4 @@
+fastapi
+fhir.resources
+PyJWT
+uvicorn
