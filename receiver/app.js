@@ -6,6 +6,7 @@ import { Capture } from "./src/capture.js";
 import { simulatorLines } from "./src/simulator.js";
 import { serialLines } from "./src/serial.js";
 import { Trace, draw } from "./src/plot.js";
+import { coalesce } from "./src/coalesce.js";
 
 const $ = (id) => document.getElementById(id);
 const outbox = new Outbox(new IndexedDbStore());
@@ -39,10 +40,13 @@ async function refresh() {
   $("notes").textContent = notes.join(" ");
 }
 
+// At most ~4 refreshes a second and never two at once: counts() clones the whole outbox.
+const scheduleRefresh = coalesce(refresh, 250);
+
 function onUploadStatus(s) {
   up = s;
   if (s.state === "auth") showError("Token invalid. Paste a new card.");
-  refresh();
+  scheduleRefresh();
 }
 
 function setRunning(on, simulated = false) {
@@ -70,7 +74,7 @@ function useCard() {
     uploader = new Uploader({ outbox, fetchFn: (...a) => fetch(...a), card, onStatus: onUploadStatus });
     uploader.start();
   }
-  refresh();
+  scheduleRefresh();
 }
 
 async function startCapture(kind) {
@@ -94,7 +98,7 @@ async function startCapture(kind) {
     outbox, sessionKey: sessionKey(card), card,
     source: kind === "sim" ? "SIMULATED" : "serial",
     onSample: (s) => { trace.push(s.I, s.Q); draw($("plot"), trace); },
-    onStatus: (st) => { stats = st; refresh(); },
+    onStatus: (st) => { stats = st; scheduleRefresh(); },
   });
   setRunning(true, kind === "sim");
   try {
@@ -108,7 +112,7 @@ async function startCapture(kind) {
   } finally {
     abort = null;
     setRunning(false);
-    refresh();
+    scheduleRefresh();
   }
 }
 
