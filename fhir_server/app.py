@@ -1,13 +1,17 @@
 import datetime as dt
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from .config import Settings
 from .routes import admin as admin_routes
 from .routes import auth as auth_routes
 from .routes import fhir as fhir_routes
 from .services.fhir_service import SUPPORTED_PARAMS
+
+RECEIVER_DIR = Path(__file__).resolve().parent.parent / "receiver"
 
 
 def capability_statement(settings) -> dict:
@@ -69,4 +73,6 @@ def create_app(settings: Settings) -> FastAPI:
                             media_type="application/fhir+json")
 
     app.include_router(fhir_routes.router)
+    app.mount("/capture", StaticFiles(directory=RECEIVER_DIR, html=True),
+              name="capture")
     return app

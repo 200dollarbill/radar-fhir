@@ -152,3 +152,13 @@ def test_account_ref_must_exist(client):
                           "role": "doctor", "ref": "Practitioner/NOPE"})
     assert r.status_code == 400
     assert r.json()["resourceType"] == "OperationOutcome"
+
+
+def test_capture_page_served(client):
+    r = client.get("/capture/")
+    assert r.status_code == 200 and "Raw signal" in r.text
+
+
+def test_capture_module_has_js_mime(client):
+    r = client.get("/capture/src/jsonlines.js")
+    assert r.status_code == 200 and "javascript" in r.headers["content-type"]
