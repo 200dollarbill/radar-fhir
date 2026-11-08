@@ -34,6 +34,27 @@ root, from `tests/`, or as a direct script run.
 If `FHIR_JWT_SECRET` is unset, `seed`/`serve` generate one and append it to
 `.env` (process-local fallback if that file cannot be written).
 
+## Raw capture receiver (prototype)
+
+A browser page at `/capture/` reads the radar's JSON lines (from the simulator,
+or from the board over Web Serial in Chrome), cuts them into chunks of at most
+1000 samples and posts each chunk as a `raw-capture` Observation. Simulator
+runs are marked `SIMULATED`. Use a scratch database, and do not run
+`seed --reset` on a database you want to keep (it wipes it).
+
+```bash
+export FHIR_JWT_SECRET=<choose> FHIR_ADMIN_PASSWORD=<choose>
+export FHIR_DB_PATH=/tmp/capture-scratch.db      # or put --db <path> before the subcommand
+.venv/bin/python -m fhir_server seed --reset
+.venv/bin/python -m fhir_server capture-session --label S001   # prints a one-line JSON card
+.venv/bin/python -m fhir_server serve --port 8000
+```
+
+`--db` is a top-level option, so it goes before the subcommand:
+`python -m fhir_server --db /tmp/x.db capture-session --label S001`. The label
+takes 1 to 32 letters, digits or hyphens. Open `http://127.0.0.1:8000/capture/`
+in Chrome and paste the card. Node tests: `node --test "receiver/tests/*.test.js"`.
+
 ## Endpoints
 
 | Method + path | Auth | Purpose |

@@ -39,6 +39,10 @@ do not reopen it.
   `docs/.superpowers/specs/2026-09-29-fhir-r4-server-walking-skeleton-design.md`.
 - **Public exposure and request history:** spec written, not implemented
   (`docs/.superpowers/specs/2026-10-08-public-exposure-request-history-design.md`).
+- **Raw capture receiver: prototype.** A browser page at `/capture/` posts raw radar
+  chunks to the server. Tested end to end with the simulator (round trip through the
+  real server); the browser and hardware paths are not yet verified. Run guide:
+  `fhir_server/README.md`.
 - **Firmware heart-rate values are placeholders**, not radar-derived measurements.
 - The old roadmap's device profile is no longer the headline goal. Add a profile only
   if the website design needs one.
@@ -62,6 +66,7 @@ docs/reference/human/           prose guides for the project owner
 docs/.superpowers/{specs,plans} specs and implementation plans
 fhir_server/, tests/            server and its tests (run guide: fhir_server/README.md)
 device_client/, arduino/        Python device client, firmware
+receiver/                       browser raw-capture page (plain JS) and its Node tests
 .tools/scrape/                  scraper, staleness check, view linter, 34 tests
 ```
 
@@ -103,6 +108,7 @@ without running it.
 
 ```bash
 .venv/bin/python -m pytest tests -q          # server tests
+node --test "receiver/tests/*.test.js"       # receiver tests
 python3 -m pytest .tools/scrape/tests -q     # 34 tests
 python3 .tools/scrape/lint_views.py          # must print "0 problem(s)"
 python3 .tools/scrape/check.py               # detect upstream doc drift (~3 min, network)
