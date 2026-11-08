@@ -40,8 +40,9 @@ do not reopen it.
 - **Public exposure and request history:** spec written, not implemented
   (`docs/.superpowers/specs/2026-10-08-public-exposure-request-history-design.md`).
 - **Raw capture receiver: prototype.** A browser page at `/capture/` posts raw radar
-  chunks to the server. Tested end to end with the simulator (round trip through the
-  real server); the browser and hardware paths are not yet verified. Run guide:
+  chunks to the server. The simulator path passed in real headless Chrome, including a
+  server kill and restart with no duplicates or lost samples. Web Serial and hardware
+  are unverified. Run guide:
   `fhir_server/README.md`.
 - **Firmware heart-rate values are placeholders**, not radar-derived measurements.
 - The old roadmap's device profile is no longer the headline goal. Add a profile only

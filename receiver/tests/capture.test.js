@@ -99,3 +99,9 @@ test("a throwing onSample rejects run() instead of reporting disconnected", asyn
   await assert.rejects(cap.run(gen(lines([0, 1]))), (e) => e === boom);
   assert.equal(store.all().length, 1);
 });
+
+test("an outbox.add rejecting with null is still a failure", async () => {
+  const { cap, outbox } = make();
+  outbox.add = async () => { throw null; };
+  await assert.rejects(() => cap.run(gen(lines(Array.from({ length: 1200 }, (_, i) => i)))), (e) => e instanceof Error);
+});

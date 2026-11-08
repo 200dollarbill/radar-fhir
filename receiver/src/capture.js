@@ -21,7 +21,7 @@ export class Capture {
   async run(lines) {
     const captureId = this.newId();
     this.stats = { samples: 0, gaps: 0, rejected: 0 };
-    let failure = null;
+    let failure = null; // always an Error once set, never falsy
     let chain = Promise.resolve();
     const chunker = new Chunker({
       onChunk: (chunk) => {
@@ -34,7 +34,7 @@ export class Capture {
               observation: buildObservation(chunk, this.card, { captureId, source: this.source }),
             });
           } catch (e) {
-            failure = e;
+            failure = e ?? new Error("outbox write failed");
           }
         });
       },

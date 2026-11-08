@@ -54,6 +54,8 @@ export FHIR_DB_PATH=/tmp/capture-scratch.db      # or put --db <path> before the
 `python -m fhir_server --db /tmp/x.db capture-session --label S001`. The label
 takes 1 to 32 letters, digits or hyphens. Open `http://127.0.0.1:8000/capture/`
 in Chrome and paste the card. Node tests: `node --test "receiver/tests/*.test.js"`.
+Verification: the simulator path passed in headless Chrome (including a server kill and
+restart); Web Serial and hardware are unverified.
 
 ## Endpoints
 

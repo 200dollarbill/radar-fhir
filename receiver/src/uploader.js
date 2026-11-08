@@ -26,7 +26,8 @@ export class Uploader {
 
   async step() {
     if (this.paused) return "auth";
-    const rec = await this.outbox.nextFor(sessionKey(this.card));
+    const card = this.card; // resume() may swap this.card mid-step
+    const rec = await this.outbox.nextFor(sessionKey(card));
     if (!rec) { this._status("idle"); return "idle"; }
     this._status("sending");
 
@@ -35,7 +36,7 @@ export class Uploader {
       res = await this.fetchFn(`${this.baseUrl}/Observation`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${this.card.token}`,
+          Authorization: `Bearer ${card.token}`,
           "Content-Type": "application/fhir+json",
           Accept: "application/fhir+json",
           "If-None-Exist": `identifier=${rec.identifier}`,
@@ -58,7 +59,7 @@ export class Uploader {
       this._status("auth");
       return "auth";
     }
-    if (res.status >= 500) return await this._retry();
+    if (res.status >= 500 || res.status === 408 || res.status === 429) return await this._retry();
 
     // Other 4xx (and anything unexpected): keep the record, mark it rejected.
     const reason = await this._reason(res);
@@ -90,7 +91,16 @@ export class Uploader {
     this.running = true;
     (async () => {
       while (this.running) {
-        const r = await this.step();
+        let r;
+        try {
+          r = await this.step();
+        } catch (e) {
+          // Storage or status-callback failure: report, wait, try again.
+          this.failures++;
+          try { this._status("error"); } catch { /* callback is broken too */ }
+          await this.sleep(BACKOFF_MS[Math.min(this.failures - 1, BACKOFF_MS.length - 1)]);
+          continue;
+        }
         if (r === "idle" || r === "auth") await this.sleep(IDLE_MS);
       }
     })();

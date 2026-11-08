@@ -146,3 +146,58 @@ test("resume with their card sends them", async () => {
   assert.equal(t.calls[0].init.headers.Authorization, "Bearer tok2");
   assert.equal(t.store.all().length, 0);
 });
+
+test("408 and 429 are retried, not rejected", async () => {
+  for (const code of [408, 429]) {
+    const t = setup([resp(code)]);
+    await t.outbox.add(rec(1));
+    assert.equal(await t.up.step(), "retry");
+    assert.equal(t.store.all()[0].rejected, false);
+    assert.equal(t.statuses.at(-1).state, "retry");
+  }
+});
+
+test("a resume during an in-flight step does not mix records and tokens", async () => {
+  const store = new MemoryStore();
+  const outbox = new Outbox(store);
+  await outbox.add(rec(1));
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const seen = [];
+  const fetchFn = async (url, init) => { seen.push(init.headers.Authorization); await gate; return resp(201); };
+  const up = new Uploader({ outbox, fetchFn, card, sleep: async () => {}, onStatus: () => {} });
+  const p = up.step();
+  await new Promise((r) => setTimeout(r, 5));
+  up.resume(card2);
+  release();
+  await p;
+  assert.deepEqual(seen, ["Bearer tok"]);
+  assert.equal(store.all().length, 0);
+});
+
+test("a storage failure in the loop is reported as error and the loop keeps going", async () => {
+  const t = setup([resp(201)]);
+  await t.outbox.add(rec(1));
+  const orig = t.outbox.nextFor.bind(t.outbox);
+  let n = 0;
+  t.outbox.nextFor = async (k) => { if (n++ === 0) throw new Error("db gone"); return orig(k); };
+  let slept = 0;
+  t.up.sleep = async () => { if (++slept > 20) t.up.stop(); await new Promise((r) => setTimeout(r, 1)); };
+  t.up.start();
+  for (let i = 0; i < 100 && t.store.all().length > 0; i++) await new Promise((r) => setTimeout(r, 5));
+  t.up.stop();
+  assert.ok(t.statuses.some((s) => s.state === "error"));
+  assert.equal(t.store.all().length, 0);
+});
+
+test("a throwing onStatus does not end the loop", async () => {
+  const t = setup([resp(201)]);
+  await t.outbox.add(rec(1));
+  let first = true;
+  t.up.onStatus = (s) => { if (first) { first = false; throw new Error("ui"); } t.statuses.push(s); };
+  t.up.sleep = async () => { await new Promise((r) => setTimeout(r, 1)); };
+  t.up.start();
+  for (let i = 0; i < 100 && t.store.all().length > 0; i++) await new Promise((r) => setTimeout(r, 5));
+  t.up.stop();
+  assert.equal(t.store.all().length, 0);
+});

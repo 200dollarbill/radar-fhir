@@ -4,13 +4,14 @@ import { Outbox, IndexedDbStore, sessionKey } from "./src/outbox.js";
 import { Uploader } from "./src/uploader.js";
 import { Capture } from "./src/capture.js";
 import { simulatorLines } from "./src/simulator.js";
-import { serialLines } from "./src/serial.js";
+import { serialLines, SERIAL_OPTIONS } from "./src/serial.js";
 import { Trace, draw } from "./src/plot.js";
 import { coalesce } from "./src/coalesce.js";
 
 const $ = (id) => document.getElementById(id);
 const outbox = new Outbox(new IndexedDbStore());
-const trace = new Trace();
+let trace = new Trace();
+let framePending = false;
 
 let card = null;
 let uploader = null;
@@ -30,6 +31,9 @@ async function refresh() {
     `Samples ${stats.samples} | Chunks confirmed ${up.confirmed} | Chunks pending ${counts.pending} | ` +
     `Gaps ${stats.gaps} | Rejected lines ${stats.rejected}`;
   const notes = [];
+  if (up.state === "auth") notes.push("Token invalid. Paste a new card.");
+  else if (up.state === "retry") notes.push("Server unreachable, retrying.");
+  else if (up.state === "error") notes.push("Local storage error while uploading, retrying.");
   if (counts.rejected > 0) {
     notes.push(`${counts.rejected} chunks rejected by the server` +
       (up.lastRejectedReason ? `; latest reason: ${up.lastRejectedReason}` : "") + ".");
@@ -45,7 +49,6 @@ const scheduleRefresh = coalesce(refresh, 250);
 
 function onUploadStatus(s) {
   up = s;
-  if (s.state === "auth") showError("Token invalid. Paste a new card.");
   scheduleRefresh();
 }
 
@@ -54,7 +57,8 @@ function setRunning(on, simulated = false) {
   $("stop").disabled = !on;
   $("connect").disabled = on || !navigator.serial;
   $("simulate").disabled = on;
-  $("simulated").hidden = !(on && simulated);
+  $("use-card").disabled = on; // chunks go to the card the capture started with
+  if (on) $("simulated").hidden = !simulated; // stays visible after Stop until the next capture
 }
 
 function useCard() {
@@ -88,16 +92,25 @@ async function startCapture(kind) {
   } else {
     try {
       const port = await navigator.serial.requestPort();
+      await port.open(SERIAL_OPTIONS);
       lines = serialLines(port, { signal });
     } catch (e) {
+      abort = null;
       showError(`Could not open serial port: ${e.message}`);
       return;
     }
   }
+  trace = new Trace();
   const capture = new Capture({
     outbox, sessionKey: sessionKey(card), card,
     source: kind === "sim" ? "SIMULATED" : "serial",
-    onSample: (s) => { trace.push(s.I, s.Q); draw($("plot"), trace); },
+    onSample: (s) => {
+      trace.push(s.I, s.Q);
+      if (!framePending) {
+        framePending = true;
+        requestAnimationFrame(() => { framePending = false; draw($("plot"), trace); });
+      }
+    },
     onStatus: (st) => { stats = st; scheduleRefresh(); },
   });
   setRunning(true, kind === "sim");
@@ -105,7 +118,7 @@ async function startCapture(kind) {
     const result = await capture.run(lines);
     if (result === "disconnected") showError("Disconnected. Click Connect to resume.");
     else if (result === "quota") {
-      showError("Browser storage is full. Capture stopped. The unsaved partial chunk was lost.");
+      showError("Browser storage is full. Capture stopped. Unsaved data (up to about 10 s) was lost.");
     }
   } catch (e) {
     showError(`Capture failed: ${e.message}`);

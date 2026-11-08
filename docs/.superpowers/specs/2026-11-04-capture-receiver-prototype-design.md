@@ -1,6 +1,6 @@
 # Capture receiver and backend prototype: design
 
-Date: 2026-11-04. Status: awaiting owner review.
+Date: 2026-11-04. Status: approved; implemented as prototype.
 
 ## Purpose
 
@@ -192,7 +192,7 @@ chunks, so raw data needs no migration.
 
 All TDD. Baseline before this work: 134 server tests pass.
 
-- **Node (`node --test receiver/tests`):** parser, chunker (gap, reboot, `fs` change,
+- **Node (`node --test "receiver/tests/*.test.js"`):** parser, chunker (gap, reboot, `fs` change,
   flush), Observation builder, outbox with an in-memory store, uploader response
   classes with a fake `fetch`, simulator line format.
 - **Contract:** a test feeds the simulator's lines and a line in the exact
@@ -226,6 +226,10 @@ as such.
   and `_count` caps at 100 with no paging. Acceptable for this prototype. The dashboard
   will need a summary or paged read.
 - **The server PC must be running** to accept uploads. Chunks wait in the browser.
+- **Only full chunks reach the outbox,** so a crash or reload mid-capture loses up to 10 s.
+- **Create and key insert commit separately,** so a crash in that window can duplicate
+  one chunk on retry.
+- **Other-session or rejected chunks have no discard path.** Clear site data to remove them.
 - **The RABITS firmware format differs** from what this page parses (below).
 
 ## Later: RABITS BLE protocol

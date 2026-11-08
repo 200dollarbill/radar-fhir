@@ -42,8 +42,9 @@ export class IndexedDbStore {
       const tx = db.transaction("outbox", mode);
       const req = fn(tx.objectStore("outbox"));
       tx.oncomplete = () => resolve(req.result);
-      tx.onerror = () => reject(tx.error);
-      tx.onabort = () => reject(tx.error);
+      const fail = () => reject(tx.error ?? req.error ?? new Error("IndexedDB request failed"));
+      tx.onerror = fail;
+      tx.onabort = fail;
     });
   }
 
