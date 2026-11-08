@@ -43,9 +43,22 @@ export class Capture {
     let result = "ended";
     let lastIdx = null;
     let lastFs = null;
-    try {
-      for await (const line of lines) {
-        const r = parseLine(line);
+    let procError = null;
+    let finished = false;
+    const it = lines[Symbol.asyncIterator]();
+    // Only a failure of the line source itself counts as a disconnect.
+    for (;;) {
+      let step;
+      try {
+        step = await it.next();
+      } catch {
+        result = "disconnected";
+        finished = true;
+        break;
+      }
+      if (step.done) { finished = true; break; }
+      try {
+        const r = parseLine(step.value);
         if (r.kind === "sample") {
           const s = r.sample;
           if (lastIdx !== null && s.fs === lastFs) {
@@ -63,13 +76,18 @@ export class Capture {
           chunker.noteRejected();
           this._emit();
         }
-        if (failure) break;
+      } catch (e) {
+        procError = e;
+        break;
       }
-    } catch {
-      result = "disconnected";
+      if (failure) break;
+    }
+    if (!finished) {
+      try { await it.return?.(); } catch { /* source cleanup failure is not actionable */ }
     }
     if (!failure) chunker.flush();
     await chain;
+    if (procError) throw procError;
     if (failure) {
       if (isQuota(failure)) return "quota";
       throw failure;

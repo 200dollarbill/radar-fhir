@@ -92,3 +92,10 @@ test("rejected line followed by the next index produces an E gap", async () => {
   assert.equal(obs.component[0].valueSampledData.data.split(" ")[1], "E");
   assert.match(obs.note[0].text, /"rejected_lines":1/);
 });
+
+test("a throwing onSample rejects run() instead of reporting disconnected", async () => {
+  const boom = new Error("ui bug");
+  const { cap, store } = make({ onSample: () => { throw boom; } });
+  await assert.rejects(cap.run(gen(lines([0, 1]))), (e) => e === boom);
+  assert.equal(store.all().length, 1);
+});
