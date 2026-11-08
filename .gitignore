@@ -8,3 +8,4 @@ arduino/radar_json/config.h
 tools/
 .env
 *.db
+apk/
