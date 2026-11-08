@@ -163,6 +163,66 @@ class FhirService:
         res.put(self.conn, resource_type, new_id, doc)
         return new_id, res.get(self.conn, resource_type, new_id), 1
 
+    @staticmethod
+    def _parse_if_none_exist(header):
+        def bad(msg):
+            return FhirError([Issue(code="value", details_text=msg,
+                                    expression="If-None-Exist")], 400)
+        parts = (header or "").split("&")
+        if len(parts) != 1 or not parts[0].startswith("identifier="):
+            raise bad("If-None-Exist must be exactly one identifier=value"
+                      " parameter")
+        raw = parts[0][len("identifier="):]
+        value = raw.partition("|")[2] if "|" in raw else raw
+        if not value:
+            raise bad("If-None-Exist identifier value is empty")
+        return value
+
+    def conditional_create(self, principal, resource_type, payload,
+                           if_none_exist):
+        """Observation retry-safe create keyed on identifier.value.
+        Returns (id, doc, created)."""
+        value = self._parse_if_none_exist(if_none_exist)
+        if resource_type != "Observation":
+            raise FhirError([Issue(
+                code="not-supported",
+                details_text="Conditional create is supported for Observation"
+                             " only", expression="If-None-Exist")], 400)
+        idents = payload.get("identifier") if isinstance(payload, dict) else None
+        if not isinstance(idents, list) or not any(
+                isinstance(i, dict) and i.get("value") == value
+                for i in idents):
+            raise FhirError([Issue(
+                code="value",
+                details_text="If-None-Exist identifier value must equal an"
+                             " identifier.value in the payload",
+                expression="If-None-Exist")], 400)
+        row = self.conn.execute(
+            "SELECT resource_id FROM conditional_keys"
+            " WHERE type=? AND identifier_value=?",
+            (resource_type, value)).fetchone()
+        if row is not None:
+            existing = res.get(self.conn, resource_type, row["resource_id"])
+            if existing is not None:
+                # authorize against the stored row, before validation, so a
+                # retry still succeeds after the Encounter has finished
+                try:
+                    authz.check(principal, "read", resource_type, existing,
+                                conn=self.conn)
+                except AuthzError as exc:
+                    raise _as_fhir_error(exc) from exc
+                return row["resource_id"], existing, False
+            self.conn.execute(
+                "DELETE FROM conditional_keys WHERE type=? AND"
+                " identifier_value=?", (resource_type, value))
+            self.conn.commit()
+        new_id, doc, _ = self.create(principal, resource_type, payload)
+        self.conn.execute(
+            "INSERT INTO conditional_keys VALUES (?,?,?)",
+            (resource_type, value, new_id))
+        self.conn.commit()
+        return new_id, doc, True
+
     def read(self, principal, resource_type, id_):
         doc = res.get(self.conn, resource_type, id_)
         if doc is None:

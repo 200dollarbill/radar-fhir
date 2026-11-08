@@ -25,6 +25,9 @@ def capability_statement(settings) -> dict:
         "searchParam": [{"code": p, "type": param_types.get(p, "token")}
                         for p in sorted(params) if p != "id"],
     } for rtype, params in SUPPORTED_PARAMS.items()]
+    for entry in resources_out:
+        if entry["type"] == "Observation":
+            entry["conditionalCreate"] = True
     return {
         "resourceType": "CapabilityStatement",
         "status": "active",
