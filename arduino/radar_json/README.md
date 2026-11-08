@@ -6,30 +6,32 @@ This Arduino IDE sketch is a first-run dummy for an M5Stack ESP32-S3 board. It r
 
 - `RADAR_I_PIN` is GPIO 1.
 - `RADAR_Q_PIN` is GPIO 2.
-- The nominal sample rate is 100 Hz.
-- The board timestamp is uptime, not synchronized Unix time.
+- The sample rate is 100 Hz, driven by a hardware timer in its own task, so serial and display work cannot delay it.
+- `sample_idx` is the time slot since boot. Lost time shows up as a jump in `sample_idx`; samples are never replayed in a burst.
+- `missed` is the running count of samples lost (skipped slots, full queue, or no room to send, such as when no host is reading).
+- The board timestamp (`t_host_unix`) is uptime, not synchronized Unix time.
 - `crc_ok` is true for locally sampled ADC data. It is not an AFE CRC implementation.
 - IMU values are read through M5Unified. If the IMU cannot initialize, the display shows `ERROR` and the emitted axes are zero.
-- The board is treated as an M5CoreS3-compatible ESP32-S3 target because no exact S3R FQBN was present in the installed CLI index. Confirm the exact hardware before upload.
+- The board is an M5Stack AtomS3R, FQBN `m5stack:esp32:m5stack_atoms3r`. USB output needs `USB CDC On Boot` enabled, which is that board's default.
 
 ## Arduino CLI
 
-The local tool reports Arduino CLI 1.5.1, ESP32 core 3.3.11, and M5Stack core 3.3.9. Install the display dependency and compile with the recognized M5CoreS3 target:
+The local tool reports Arduino CLI 1.5.1, ESP32 core 3.3.11, and M5Stack core 3.3.9. Install the display dependency and compile for the AtomS3R:
 
 ```bash
 arduino-cli lib install M5Unified
 arduino-cli core install esp32:esp32
-arduino-cli compile --fqbn m5stack:esp32:m5stack_cores3 arduino/radar_json
+arduino-cli compile --fqbn m5stack:esp32:m5stack_atoms3r arduino/radar_json
 ```
 
 List the connected port before any upload:
 
 ```bash
 arduino-cli board list
-arduino-cli upload -p <serial-port> --fqbn m5stack:esp32:m5stack_cores3 arduino/radar_json
+arduino-cli upload -p <serial-port> --fqbn m5stack:esp32:m5stack_atoms3r arduino/radar_json
 ```
 
-Do not upload until GPIO 1 and GPIO 2 are confirmed against the AFE wiring.
+GPIO 1 and GPIO 2 are not yet confirmed against the AFE wiring. Do not connect the radar until they are; with nothing attached the sketch only reads pin noise, which is not radar signal.
 
 ## WiFi heart-rate ingest (config.h)
 
@@ -49,6 +51,6 @@ same `Authorization: Bearer` header).
 `config.h` is compile-time: an empty `DEVICE_TOKEN` or `ENCOUNTER_REF` disables
 ingest entirely and the sketch runs as the serial-only dummy.
 
-**Standing rule: do not upload** until GPIO 1/2 are confirmed against the AFE
-wiring (see Assumptions). The ingest path is compile-verified only; WiFi, NTP
+**Standing rule: do not connect the radar** until GPIO 1/2 are confirmed against
+the AFE wiring (see Assumptions). The ingest path is compile-verified only; WiFi, NTP
 and the POST itself require a connected board and a running server.

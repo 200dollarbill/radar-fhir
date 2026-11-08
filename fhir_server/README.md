@@ -55,7 +55,8 @@ export FHIR_DB_PATH=/tmp/capture-scratch.db      # or put --db <path> before the
 takes 1 to 32 letters, digits or hyphens. Open `http://127.0.0.1:8000/capture/`
 in Chrome and paste the card. Node tests: `node --test "receiver/tests/*.test.js"`.
 Verification: the simulator path passed in headless Chrome (including a server kill and
-restart); Web Serial and hardware are unverified.
+restart). It also passed with real AtomS3R bytes through a stand-in port (pin noise, not radar
+signal); Chrome's own Web Serial port layer is unverified.
 
 ## Endpoints
 

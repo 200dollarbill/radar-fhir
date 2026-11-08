@@ -23,8 +23,9 @@ Out of scope for this prototype:
   computer at `http://127.0.0.1:8000`. Web Serial accepts localhost as a secure
   context, and page and API share an origin, so adding the tunnel later needs no
   page changes. The tunnel stays the chosen hosting route.
-- **Firmware changes.** The page reads the format `arduino/radar_json/radar_json.ino`
-  already emits.
+- **Firmware format changes.** The page reads the format `arduino/radar_json/radar_json.ino`
+  already emits. Amended after the hardware test: the sketch's sample timing was fixed
+  (`sample_idx` is now a time slot, so lost time is a visible gap), with the line format unchanged.
 - **Bluetooth.** The RABITS BLE protocol below is recorded for later use. The
   owner's Bluetooth is broken, so it cannot be tested now.
 - **JVP processing, ECG, RME and the doctor dashboard.**
