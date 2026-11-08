@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import re
 import secrets
 import sys
 
@@ -123,6 +124,99 @@ def cmd_seed(args):
     }))
 
 
+def cmd_capture_session(args):
+    from datetime import datetime, timezone
+
+    from . import db as db_mod
+    from .auth.jwt import Principal
+    from .config import Settings
+    from .repositories import resources
+    from .services.fhir_service import FhirError, FhirService
+
+    label = args.label
+    if not re.fullmatch(r"[A-Za-z0-9-]{1,32}", label):
+        print("invalid label: use 1-32 letters, digits or hyphens",
+              file=sys.stderr)
+        sys.exit(2)
+    conn = db_mod.connect(args.db)
+    db_mod.init(conn)
+    first = {t: (resources.list(conn, t) or [None])[0]
+             for t in ("Organization", "Location", "Practitioner", "Device")}
+    if not all(first.values()):
+        print('database not seeded: run "seed" first', file=sys.stderr)
+        sys.exit(1)
+    org, loc, prac, dev = (first[t] for t in
+                           ("Organization", "Location", "Practitioner",
+                            "Device"))
+    svc = FhirService(conn, Settings.from_env(db_path=args.db))
+    admin = Principal(kind="admin")
+
+    patient = None
+    for _ in range(10):
+        nik = "9900" + "".join(secrets.choice("0123456789") for _ in range(12))
+        try:
+            _, patient, _ = svc.create(admin, "Patient", {
+                "resourceType": "Patient",
+                "identifier": [{"use": "official",
+                                "system": "https://fhir.kemkes.go.id/id/nik",
+                                "value": nik}],
+                "name": [{"use": "official", "text": f"Sesi {label}"}],
+                "gender": "male", "birthDate": "1990-01-01",
+                "multipleBirthBoolean": False,
+                "address": [{
+                    "use": "home", "line": ["Sesi capture"],
+                    "city": "Jakarta Pusat", "postalCode": "10110",
+                    "country": "ID",
+                    "extension": [{
+                        "url": "https://fhir.kemkes.go.id/r4/StructureDefinition/"
+                               "administrativeCode",
+                        "extension": [
+                            {"url": "province", "valueCode": "31"},
+                            {"url": "city", "valueCode": "3171"},
+                            {"url": "district", "valueCode": "317101"},
+                            {"url": "village", "valueCode": "317101001"},
+                            {"url": "rt", "valueCode": "001"},
+                            {"url": "rw", "valueCode": "001"}]}]}]})
+            break
+        except FhirError as exc:
+            if exc.status != 409:
+                raise
+    if patient is None:
+        print("could not allocate a unique synthetic NIK", file=sys.stderr)
+        sys.exit(1)
+
+    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    org_id = org["id"]
+    enc_doc = {
+        "resourceType": "Encounter",
+        "identifier": [{"use": "official",
+                        "system": f"http://sys-ids.kemkes.go.id/encounter/{org_id}",
+                        "value": f"capture-{label}-{secrets.token_hex(4)}"}],
+        "status": "arrived",
+        "statusHistory": [{"status": "arrived", "period": {"start": now}}],
+        "class": {"system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+                  "code": "AMB", "display": "ambulatory"},
+        "subject": {"reference": f"Patient/{patient['id']}"},
+        "participant": [{"individual": {
+            "reference": f"Practitioner/{prac['id']}"}}],
+        "period": {"start": now},
+        "location": [{"location": {"reference": f"Location/{loc['id']}"}}],
+        "serviceProvider": {"reference": f"Organization/{org_id}"},
+    }
+    enc_id, enc, _ = svc.create(admin, "Encounter", enc_doc)
+    enc = dict(enc)
+    enc["status"] = "in-progress"
+    enc["statusHistory"] = list(enc["statusHistory"]) + [
+        {"status": "in-progress", "period": {"start": now}}]
+    svc.update(admin, "Encounter", enc_id, enc)
+
+    token = svc.provision_device(admin, dev["id"], f"Patient/{patient['id']}")
+    print(json.dumps({
+        "token": token, "patient": f"Patient/{patient['id']}",
+        "encounter": f"Encounter/{enc_id}", "device": f"Device/{dev['id']}",
+        "org": org_id, "label": label}))
+
+
 def cmd_serve(args):
     import uvicorn
 
@@ -143,6 +237,9 @@ def main(argv=None):
     seed = sub.add_parser("seed")
     seed.add_argument("--reset", action="store_true")
     seed.set_defaults(fn=cmd_seed)
+    cap = sub.add_parser("capture-session")
+    cap.add_argument("--label", required=True)
+    cap.set_defaults(fn=cmd_capture_session)
     serve = sub.add_parser("serve")
     serve.add_argument("--port", type=int, default=8000)
     serve.set_defaults(fn=cmd_serve)
