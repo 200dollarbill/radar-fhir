@@ -215,8 +215,8 @@ All TDD. Baseline before this work: 134 server tests pass.
 3. Hardware smoke test, run with the owner since the port picker needs a click: flash
    `radar_json.ino` to the **spare blank board**, connect, see lines reach the server.
 
-The board's ADC pins are placeholders and no radar wiring is confirmed, so test 3
-proves the data path only. Its values are not radar signal and must not be reported
+Test 3 ran with unwired pins, so it proves the data path only. (Amended 2026-11-16:
+the owner gave the radar pins as G7 and G8; the I/Q order is assumed.) Its values are not radar signal and must not be reported
 as such.
 
 ## Known limits

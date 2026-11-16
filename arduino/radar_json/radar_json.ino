@@ -5,9 +5,10 @@
 #include "ingest.h"
 #include "sampling.h"
 
-// Placeholder pins. Confirm the AFE wiring before connecting the radar.
-constexpr int RADAR_I_PIN = 1;
-constexpr int RADAR_Q_PIN = 2;
+// Radar I/Q on G7 and G8 (ADC1 channels 6 and 7; the AtomS3R core names them ADC1/ADC2).
+// Pins given by the owner on 2026-11-16. Which of the two carries I and which Q is assumed.
+constexpr int RADAR_I_PIN = 7;
+constexpr int RADAR_Q_PIN = 8;
 constexpr uint32_t SAMPLE_RATE_HZ = 100;
 constexpr uint32_t SAMPLE_PERIOD_US = 1000000UL / SAMPLE_RATE_HZ;
 constexpr uint32_t DISPLAY_REFRESH_MS = 250;

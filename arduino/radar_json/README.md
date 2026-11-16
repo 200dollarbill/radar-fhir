@@ -4,8 +4,7 @@ This Arduino IDE sketch is a first-run dummy for an M5Stack ESP32-S3 board. It r
 
 ## Assumptions
 
-- `RADAR_I_PIN` is GPIO 1.
-- `RADAR_Q_PIN` is GPIO 2.
+- `RADAR_I_PIN` is GPIO 7 (G7) and `RADAR_Q_PIN` is GPIO 8 (G8), as given by the owner on 2026-11-16. Both are ADC1 channels. Which pin carries I and which carries Q is an assumption; swap the two constants if the radar wiring says otherwise.
 - The sample rate is 100 Hz, driven by a hardware timer in its own task, so serial and display work cannot delay it.
 - `sample_idx` is the time slot since boot. Lost time shows up as a jump in `sample_idx`; samples are never replayed in a burst.
 - `missed` is the running count of samples lost (skipped slots, full queue, or no room to send, such as when no host is reading).
@@ -31,7 +30,7 @@ arduino-cli board list
 arduino-cli upload -p <serial-port> --fqbn m5stack:esp32:m5stack_atoms3r arduino/radar_json
 ```
 
-GPIO 1 and GPIO 2 are not yet confirmed against the AFE wiring. Do not connect the radar until they are; with nothing attached the sketch only reads pin noise, which is not radar signal.
+The radar connects to G7 (I) and G8 (Q). With nothing attached the sketch only reads pin noise, which is not radar signal. The ADC reads 0 to about 3.1 V; keep the radar outputs inside that range.
 
 ## WiFi heart-rate ingest (config.h)
 
@@ -51,6 +50,5 @@ same `Authorization: Bearer` header).
 `config.h` is compile-time: an empty `DEVICE_TOKEN` or `ENCOUNTER_REF` disables
 ingest entirely and the sketch runs as the serial-only dummy.
 
-**Standing rule: do not connect the radar** until GPIO 1/2 are confirmed against
-the AFE wiring (see Assumptions). The ingest path is compile-verified only; WiFi, NTP
+The radar goes on G7/G8 (see Assumptions). The ingest path is compile-verified only; WiFi, NTP
 and the POST itself require a connected board and a running server.
