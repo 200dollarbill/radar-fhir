@@ -44,6 +44,10 @@ do not reopen it.
   from an AtomS3R (unwired pins, so pin noise, not radar signal), through a stand-in
   port. Chrome's own Web Serial port layer is not verified because the picker needs a
   click. Run guide: `fhir_server/README.md`.
+- **Firmware (`arduino/radar_json/`) runs on the AtomS3R** at 100 Hz, timer-driven, and
+  reads radar I/Q on **G7 (I) and G8 (Q)**. The pins were given by the owner; the I/Q
+  order is assumed. Flashed and checked on 2026-11-16 (`READY ... i_pin=7 q_pin=8`).
+  No radar has been wired yet, so every capture so far is pin noise.
 - **Firmware heart-rate values are placeholders**, not radar-derived measurements.
 - The old roadmap's device profile is no longer the headline goal. Add a profile only
   if the website design needs one.
@@ -66,7 +70,7 @@ docs/reference/claude/          31 dense FHIR/SATUSEHAT files + INDEX.md: what Y
 docs/reference/human/           prose guides for the project owner
 docs/.superpowers/{specs,plans} specs and implementation plans
 fhir_server/, tests/            server and its tests (run guide: fhir_server/README.md)
-device_client/, arduino/        Python device client, firmware
+device_client/, arduino/        Python device client, firmware (arduino/radar_json/)
 receiver/                       browser raw-capture page (plain JS) and its Node tests
 .tools/scrape/                  scraper, staleness check, view linter, 34 tests
 ```
@@ -113,6 +117,11 @@ node --test "receiver/tests/*.test.js"       # receiver tests
 python3 -m pytest .tools/scrape/tests -q     # 34 tests
 python3 .tools/scrape/lint_views.py          # must print "0 problem(s)"
 python3 .tools/scrape/check.py               # detect upstream doc drift (~3 min, network)
+
+# firmware (AtomS3R on /dev/ttyACM0)
+FQBN="m5stack:esp32:m5stack_atoms3r:USBMode=hwcdc,CDCOnBoot=cdc"
+arduino-cli compile --fqbn "$FQBN" arduino/radar_json
+arduino-cli upload -p /dev/ttyACM0 --fqbn "$FQBN" arduino/radar_json
 ```
 
 ## Conventions
