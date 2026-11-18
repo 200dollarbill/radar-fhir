@@ -20,9 +20,11 @@ for the doctor. The integrated display is the decision support; the doctor decid
 - FHIR and SATUSEHAT are the interoperability bridge, not the headline contribution.
 - The contribution is the system, not the RADAR device or an interpretation algorithm.
 
-**Next phase:** literature deepening, JVP signal link to cardiovascular health first
-(`docs/.superpowers/specs/2026-11-03-literature-deepening-design.md`; results in
-`docs/papers/search/`). The website architecture is not designed yet and gets its own
+**Next session: start with `docs/handover/2026-11-18-handover.md`.** Next task: proposal
+development (Chapter III, progress, presentation), spec
+`docs/.superpowers/specs/2026-11-18-proposal-development-design.md`, awaiting the owner's
+approval. Literature deepening (`docs/.superpowers/specs/2026-11-03-literature-deepening-design.md`;
+results in `docs/papers/search/`) has produced L1 to L8. The website architecture is not designed yet and gets its own
 brainstorm after that.
 
 **Thesis work starts at `proposal_CLAUDE.md`**: direction history, scope, urgency
@@ -47,8 +49,25 @@ do not reopen it.
 - **Firmware (`arduino/radar_json/`) runs on the AtomS3R** at 100 Hz, timer-driven, and
   reads radar I/Q on **G7 (I) and G8 (Q)**. The pins were given by the owner; the I/Q
   order is assumed. Flashed and checked on 2026-11-16 (`READY ... i_pin=7 q_pin=8`).
-  No radar has been wired yet, so every capture so far is pin noise.
+  The owner reports the radar wired as of 2026-11-18; captures before that are pin noise.
+  Idle read: both channels near 1.53 V, about 1 mV spread. Recordings on 2026-11-18 (85 and
+  4 chunks) spread 90 to 170 mV and show clean I/Q arcs in some windows, so the radar
+  responds to movement; not yet reviewed as physiology (handover §5).
 - **Firmware heart-rate values are placeholders**, not radar-derived measurements.
+- **Display processing: `hybrid` chosen (2026-11-18), unsupervised, owner to confirm.**
+  `/capture/` now shows a movement waveform (0.5 to 10 Hz, relative units) and an I/Q
+  plane; `/capture/review.html` compares six methods on a saved CSV or Bundle. Chosen
+  by a fixed rule on synthetic ground truth; the real RABITS capture only checks the
+  guard. Display only, never a measurement. Spec:
+  `docs/.superpowers/specs/2026-11-18-radar-display-processing-design.md`; results:
+  `docs/eval/2026-11-18-radar-display-processing.md`.
+- **Board sessions and site navigation (2026-11-18, implemented).** The board answers
+  `BOARD?` with its chip ID and a key it made itself (sent in clear on request: known
+  weakness, fix = challenge and response). Admins register boards and create test
+  patients; admins or doctors open sessions on `/capture/sessions.html`; the capture page
+  gets the plugged-in board's session (preview, then Record). All pages share a top bar.
+  Flashed 2026-11-18: the AtomS3R answers `BOARD?` (ID `CCBA97030AD4`). Spec:
+  `docs/.superpowers/specs/2026-11-18-board-sessions-and-navigation-design.md`.
 - The old roadmap's device profile is no longer the headline goal. Add a profile only
   if the website design needs one.
 
@@ -71,7 +90,9 @@ docs/reference/human/           prose guides for the project owner
 docs/.superpowers/{specs,plans} specs and implementation plans
 fhir_server/, tests/            server and its tests (run guide: fhir_server/README.md)
 device_client/, arduino/        Python device client, firmware (arduino/radar_json/)
-receiver/                       browser raw-capture page (plain JS) and its Node tests
+receiver/                       browser capture + review pages (plain JS), Node tests
+receiver/src/dsp/, eval/        display processing (demodulation, filters) and its evaluation
+docs/eval/                      generated evaluation reports (do not hand-edit)
 .tools/scrape/                  scraper, staleness check, view linter, 34 tests
 ```
 
@@ -114,6 +135,7 @@ without running it.
 ```bash
 .venv/bin/python -m pytest tests -q          # server tests
 node --test "receiver/tests/*.test.js"       # receiver tests
+node receiver/eval/run.mjs                   # rescore display methods, rewrites docs/eval/
 python3 -m pytest .tools/scrape/tests -q     # 34 tests
 python3 .tools/scrape/lint_views.py          # must print "0 problem(s)"
 python3 .tools/scrape/check.py               # detect upstream doc drift (~3 min, network)

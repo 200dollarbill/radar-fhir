@@ -52,8 +52,12 @@ export FHIR_DB_PATH=/tmp/capture-scratch.db      # or put --db <path> before the
 
 `--db` is a top-level option, so it goes before the subcommand:
 `python -m fhir_server --db /tmp/x.db capture-session --label S001`. The label
-takes 1 to 32 letters, digits or hyphens. Open `http://127.0.0.1:8000/capture/`
-in Chrome and paste the card. Node tests: `node --test "receiver/tests/*.test.js"`.
+takes 1 to 32 letters, digits or hyphens. The card is for the device client and
+tests; the page no longer takes one. Since 2026-11-18 the page gets its session
+from the board: the board answers `BOARD?` with its ID and key, an admin registers
+it, and an admin or doctor opens a session on `/capture/sessions.html` (API under
+`/api`, spec `docs/.superpowers/specs/2026-11-18-board-sessions-and-navigation-design.md`,
+walkthrough `docs/RUN-GUIDE.md`). Node tests: `node --test "receiver/tests/*.test.js"`.
 Verification: the simulator path passed in headless Chrome (including a server kill and
 restart). It also passed with real AtomS3R bytes through a stand-in port (pin noise, not radar
 signal); Chrome's own Web Serial port layer is unverified.
