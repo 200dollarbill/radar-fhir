@@ -1,7 +1,10 @@
 #include <Arduino.h>
 #include <M5Unified.h>
 #include <atomic>
+#include <esp_random.h>
 #include <esp_timer.h>
+#include <Preferences.h>
+#include "board.h"
 #include "ingest.h"
 #include "sampling.h"
 
@@ -34,6 +37,42 @@ bool imuOk = false;
 QueueHandle_t sampleQueue = nullptr;
 TaskHandle_t samplerTask = nullptr;
 
+// Board identity (board.h): ID from the factory MAC, key made on first boot and
+// kept in NVS, so reflashing the sketch keeps it (a full flash erase does not).
+char boardId[13] = {0};
+char boardKey[65] = {0};
+LineReader commandReader;
+
+void loadBoardIdentity() {
+  hexId(ESP.getEfuseMac(), boardId);
+  Preferences prefs;
+  prefs.begin("prata", false);
+  String stored = prefs.getString("board_key", "");
+  if (keyIsValid(stored.c_str())) {
+    strncpy(boardKey, stored.c_str(), sizeof(boardKey) - 1);
+  } else {
+    uint8_t raw[32];
+    esp_fill_random(raw, sizeof(raw));
+    toHex(raw, sizeof(raw), boardKey);
+    prefs.putString("board_key", boardKey);
+  }
+  prefs.end();
+}
+
+// Answers BOARD? with ID and key. Sent only when it fits whole, like samples;
+// the page asks again every second until it gets an answer.
+void serviceCommands() {
+  while (Serial.available() > 0) {
+    if (!commandReader.push(static_cast<char>(Serial.read()))) continue;
+    if (!isBoardQuery(commandReader.line())) continue;
+    char line[160];
+    const int n = formatBoardLine(line, sizeof(line), boardId, boardKey);
+    if (n > 0 && lineFits(Serial.availableForWrite(), n)) {
+      Serial.write(reinterpret_cast<const uint8_t*>(line), n);
+    }
+  }
+}
+
 void drawStatus(const char* state) {
   if (millis() - lastDisplayMs < DISPLAY_REFRESH_MS) return;
   lastDisplayMs = millis();
@@ -47,6 +86,8 @@ void drawStatus(const char* state) {
   M5.Display.printf("sample: %lu\n", static_cast<unsigned long>(lastIndex));
   M5.Display.printf("I pin: %d  Q pin: %d\n", RADAR_I_PIN, RADAR_Q_PIN);
   M5.Display.printf("IMU: %s\n", imuOk ? "OK" : "ERROR");
+  M5.Display.setTextSize(1);
+  M5.Display.printf("ID %s\n", boardId);
 }
 
 float adcVoltage(int pin) {
@@ -111,7 +152,8 @@ void setup() {
   pinMode(RADAR_Q_PIN, INPUT);
   imuOk = M5.Imu.begin();
   lastSentMs = millis();
-  Serial.printf("READY radar_json i_pin=%d q_pin=%d fs=%lu imu_ok=%s\n",
+  loadBoardIdentity();
+  Serial.printf("READY radar_json id=%s i_pin=%d q_pin=%d fs=%lu imu_ok=%s\n", boardId,
                 RADAR_I_PIN, RADAR_Q_PIN, static_cast<unsigned long>(SAMPLE_RATE_HZ),
                 imuOk ? "true" : "false");
   if (ingestConfigured()) {
@@ -129,6 +171,7 @@ void setup() {
 }
 
 void loop() {
+  serviceCommands();
   Sample s;
   if (xQueueReceive(sampleQueue, &s, pdMS_TO_TICKS(5)) == pdTRUE) {
     sendSample(s);

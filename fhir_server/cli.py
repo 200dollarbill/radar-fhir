@@ -125,13 +125,12 @@ def cmd_seed(args):
 
 
 def cmd_capture_session(args):
-    from datetime import datetime, timezone
-
     from . import db as db_mod
     from .auth.jwt import Principal
     from .config import Settings
     from .repositories import resources
     from .services.fhir_service import FhirError, FhirService
+    from .services.sessions import make_test_patient, open_visit
 
     label = args.label
     if not re.fullmatch(r"[A-Za-z0-9-]{1,32}", label):
@@ -145,76 +144,42 @@ def cmd_capture_session(args):
     if not all(first.values()):
         print('database not seeded: run "seed" first', file=sys.stderr)
         sys.exit(1)
-    org, loc, prac, dev = (first[t] for t in
-                           ("Organization", "Location", "Practitioner",
-                            "Device"))
+    org, prac, dev = first["Organization"], first["Practitioner"], first["Device"]
     svc = FhirService(conn, Settings.from_env(db_path=args.db))
     admin = Principal(kind="admin")
-
-    patient = None
-    for _ in range(10):
-        nik = "9900" + "".join(secrets.choice("0123456789") for _ in range(12))
-        try:
-            _, patient, _ = svc.create(admin, "Patient", {
-                "resourceType": "Patient",
-                "identifier": [{"use": "official",
-                                "system": "https://fhir.kemkes.go.id/id/nik",
-                                "value": nik}],
-                "name": [{"use": "official", "text": f"Sesi {label}"}],
-                "gender": "male", "birthDate": "1990-01-01",
-                "multipleBirthBoolean": False,
-                "address": [{
-                    "use": "home", "line": ["Sesi capture"],
-                    "city": "Jakarta Pusat", "postalCode": "10110",
-                    "country": "ID",
-                    "extension": [{
-                        "url": "https://fhir.kemkes.go.id/r4/StructureDefinition/"
-                               "administrativeCode",
-                        "extension": [
-                            {"url": "province", "valueCode": "31"},
-                            {"url": "city", "valueCode": "3171"},
-                            {"url": "district", "valueCode": "317101"},
-                            {"url": "village", "valueCode": "317101001"},
-                            {"url": "rt", "valueCode": "001"},
-                            {"url": "rw", "valueCode": "001"}]}]}]})
-            break
-        except FhirError as exc:
-            if exc.status != 409:
-                raise
-    if patient is None:
-        print("could not allocate a unique synthetic NIK", file=sys.stderr)
+    try:
+        patient = make_test_patient(svc, label)
+    except FhirError as exc:
+        print(str(exc), file=sys.stderr)
         sys.exit(1)
-
-    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-    org_id = org["id"]
-    enc_doc = {
-        "resourceType": "Encounter",
-        "identifier": [{"use": "official",
-                        "system": f"http://sys-ids.kemkes.go.id/encounter/{org_id}",
-                        "value": f"capture-{label}-{secrets.token_hex(4)}"}],
-        "status": "arrived",
-        "statusHistory": [{"status": "arrived", "period": {"start": now}}],
-        "class": {"system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
-                  "code": "AMB", "display": "ambulatory"},
-        "subject": {"reference": f"Patient/{patient['id']}"},
-        "participant": [{"individual": {
-            "reference": f"Practitioner/{prac['id']}"}}],
-        "period": {"start": now},
-        "location": [{"location": {"reference": f"Location/{loc['id']}"}}],
-        "serviceProvider": {"reference": f"Organization/{org_id}"},
-    }
-    enc_id, enc, _ = svc.create(admin, "Encounter", enc_doc)
-    enc = dict(enc)
-    enc["status"] = "in-progress"
-    enc["statusHistory"] = list(enc["statusHistory"]) + [
-        {"status": "in-progress", "period": {"start": now}}]
-    svc.update(admin, "Encounter", enc_id, enc)
-
+    enc_id = open_visit(svc, admin, patient["id"], f"Practitioner/{prac['id']}",
+                        label)
     token = svc.provision_device(admin, dev["id"], f"Patient/{patient['id']}")
     print(json.dumps({
         "token": token, "patient": f"Patient/{patient['id']}",
         "encounter": f"Encounter/{enc_id}", "device": f"Device/{dev['id']}",
-        "org": org_id, "label": label}))
+        "org": org["id"], "label": label}))
+
+
+def cmd_set_password(args):
+    """Seed reads FHIR_ADMIN_PASSWORD only once; this changes a password later
+    without wiping the database. The password comes from an environment
+    variable so it never appears in the shell history or the output."""
+    from . import db as db_mod
+    from .auth.passwords import hash_password
+    from .repositories import accounts
+
+    password = os.environ.get(args.from_env)
+    if not password:
+        print(f"environment variable {args.from_env} is not set or empty",
+              file=sys.stderr)
+        sys.exit(2)
+    conn = db_mod.connect(args.db)
+    db_mod.init(conn)
+    if not accounts.set_password(conn, args.username, hash_password(password)):
+        print(f"no active account named {args.username}", file=sys.stderr)
+        sys.exit(1)
+    print(f"password updated for {args.username}")
 
 
 def cmd_serve(args):
@@ -240,6 +205,11 @@ def main(argv=None):
     cap = sub.add_parser("capture-session")
     cap.add_argument("--label", required=True)
     cap.set_defaults(fn=cmd_capture_session)
+    pw = sub.add_parser("set-password")
+    pw.add_argument("--username", required=True)
+    pw.add_argument("--from-env", default="FHIR_ADMIN_PASSWORD",
+                    help="environment variable holding the new password")
+    pw.set_defaults(fn=cmd_set_password)
     serve = sub.add_parser("serve")
     serve.add_argument("--port", type=int, default=8000)
     serve.set_defaults(fn=cmd_serve)

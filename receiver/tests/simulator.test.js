@@ -52,3 +52,34 @@ test("abort during the default sleep ends the generator promptly", async () => {
   setTimeout(() => ac.abort(), 50);
   await p;
 });
+
+test("virtualBoard makes a SIM id and key once and keeps them", async () => {
+  const { virtualBoard } = await import("../src/simulator.js");
+  const m = new Map();
+  const storage = { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, v) };
+  const a = virtualBoard(storage);
+  assert.match(a.id, /^SIM-[0-9A-F]{8}$/);
+  assert.match(a.key, /^[0-9a-f]{64}$/);
+  assert.deepEqual(virtualBoard(storage), a);
+  // no storage at all still gives a usable board for this page load
+  assert.match(virtualBoard(null).id, /^SIM-/);
+});
+
+test("the simulator answers BOARD? between samples", async () => {
+  const { simulatorSource } = await import("../src/simulator.js");
+  const { parseBoardLine } = await import("../src/board.js");
+  let t = 0;
+  const board = { id: "SIM-0A1B2C3D", key: "ab".repeat(32) };
+  const ac = new AbortController();
+  const src = simulatorSource(board, { now: () => t, sleep: async () => { t += 20; }, signal: ac.signal });
+  const out = [];
+  for await (const line of src.lines) {
+    out.push(line);
+    if (out.length === 3) await src.send("BOARD?\n");
+    if (out.length > 12) break;
+  }
+  const replies = out.map(parseBoardLine).filter(Boolean);
+  assert.equal(replies.length, 1);
+  assert.deepEqual({ id: replies[0].id, key: replies[0].key }, board);
+  assert.ok(out.filter((l) => l.startsWith("{")).length >= 10);
+});

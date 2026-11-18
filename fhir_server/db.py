@@ -16,6 +16,16 @@ CREATE TABLE IF NOT EXISTS device_tokens (
 CREATE TABLE IF NOT EXISTS conditional_keys (
     type TEXT NOT NULL, identifier_value TEXT NOT NULL,
     resource_id TEXT NOT NULL, PRIMARY KEY (type, identifier_value));
+CREATE TABLE IF NOT EXISTS boards (
+    serial TEXT PRIMARY KEY, device_id TEXT NOT NULL UNIQUE,
+    key_sha256 TEXT NOT NULL UNIQUE, registered TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS board_sessions (
+    id TEXT PRIMARY KEY, serial TEXT NOT NULL, device_id TEXT NOT NULL,
+    patient_ref TEXT NOT NULL, encounter_ref TEXT NOT NULL,
+    practitioner_ref TEXT NOT NULL, label TEXT NOT NULL,
+    started TEXT NOT NULL, ended TEXT);
+CREATE UNIQUE INDEX IF NOT EXISTS one_open_session_per_board
+    ON board_sessions(serial) WHERE ended IS NULL;
 """
 
 

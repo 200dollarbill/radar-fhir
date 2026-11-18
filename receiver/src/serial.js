@@ -27,3 +27,13 @@ export async function* serialLines(port, { signal } = {}) {
 
 // 64 KiB: the 255-byte default overruns in about 13 ms at 19 KB/s.
 export const SERIAL_OPTIONS = { baudRate: 115200, bufferSize: 65536 };
+
+// Host-to-board command, e.g. "BOARD?\n". Holds the writer only for this write.
+export async function serialSend(port, text) {
+  const writer = port.writable.getWriter();
+  try {
+    await writer.write(new TextEncoder().encode(text));
+  } finally {
+    writer.releaseLock();
+  }
+}

@@ -9,9 +9,24 @@ from .config import Settings
 from .routes import admin as admin_routes
 from .routes import auth as auth_routes
 from .routes import fhir as fhir_routes
+from .routes import sessions as session_routes
 from .services.fhir_service import SUPPORTED_PARAMS
 
 RECEIVER_DIR = Path(__file__).resolve().parent.parent / "receiver"
+
+
+class RevalidatedStaticFiles(StaticFiles):
+    """Static files the browser must re-check on every load (cheap 304s).
+
+    Without Cache-Control, Chrome guesses a freshness time and may run an old
+    cached module next to a new one; a missing export then stops the whole page.
+    Files cached that way before this header existed are repaired in the browser
+    by receiver/guard.js (Chrome ignores Clear-Site-Data on http://127.0.0.1)."""
+
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
 
 
 def capability_statement(settings) -> dict:
@@ -64,6 +79,7 @@ def create_app(settings: Settings) -> FastAPI:
     db_mod.init(app.state.conn)
     app.include_router(auth_routes.router)
     app.include_router(admin_routes.router)
+    app.include_router(session_routes.router)
 
     # Registered before the FHIR router: GET /fhir-r4/v1/metadata must not be
     # swallowed by GET /fhir-r4/v1/{type_} (pre-flight ordering ruling).
@@ -73,6 +89,6 @@ def create_app(settings: Settings) -> FastAPI:
                             media_type="application/fhir+json")
 
     app.include_router(fhir_routes.router)
-    app.mount("/capture", StaticFiles(directory=RECEIVER_DIR, html=True),
+    app.mount("/capture", RevalidatedStaticFiles(directory=RECEIVER_DIR, html=True),
               name="capture")
     return app

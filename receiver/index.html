@@ -3,39 +3,74 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Raw signal capture</title>
-<style>
-  body { font-family: system-ui, sans-serif; max-width: 52rem; margin: 1rem auto; padding: 0 1rem; }
-  textarea { width: 100%; height: 6rem; font-family: monospace; }
-  canvas { width: 100%; height: 200px; border: 1px solid #888; background: #fafafa; }
-  #simulated { background: #b00020; color: #fff; font-size: 2rem; font-weight: bold; text-align: center; padding: .5rem; margin: .5rem 0; }
-  #error { color: #b00020; font-weight: bold; min-height: 1.5rem; }
-  #notes { color: #444; }
-  [hidden] { display: none !important; }
-</style>
+<title>Capture</title>
+<link rel="stylesheet" href="site.css">
 </head>
 <body>
-<h1>Raw signal capture</h1>
-<p><strong>Raw signal only. Not a measurement result or a clinical finding.</strong></p>
+<nav class="top" id="topnav" aria-label="Site">
+  <span class="brand">PRATA</span>
+  <ul><li><a href="sessions.html">Sessions</a></li><li><a href="./" aria-current="page">Capture</a></li><li><a href="review.html">Review</a></li></ul>
+  <span class="user"><a href="sessions.html">Log in</a></span>
+</nav>
+<main>
+<p id="load-error" class="notice warn" role="alert" hidden></p>
+<h1>Capture</h1>
+<p class="disclaimer">Raw signal and display processing only. Not a measurement result or a clinical finding.</p>
+<div id="simulated" class="banner-sim" hidden>SIMULATED</div>
 
-<section>
-  <label for="card">Session card</label>
-  <textarea id="card" autocomplete="off" spellcheck="false"></textarea>
-  <button id="use-card">Use card</button>
-  <span id="card-label"></span>
+<section class="panel" aria-labelledby="h-board">
+  <h2 id="h-board"><span class="step">1</span>Board</h2>
+  <div class="row">
+    <button id="connect" class="primary">Connect board</button>
+    <button id="simulate">Use simulated board</button>
+    <button id="disconnect" disabled>Disconnect</button>
+  </div>
+  <p id="board-status" class="notice">No board connected. Plug the board in by USB and click Connect board.</p>
+  <div id="board-actions" class="row" hidden>
+    <button id="register" hidden>Register this board</button>
+    <button id="check">Check again</button>
+    <a id="to-sessions" href="sessions.html" target="_blank" rel="noopener" hidden>Open Sessions in a new tab</a>
+  </div>
 </section>
 
-<section>
-  <button id="connect">Connect serial</button>
-  <button id="simulate">Start simulator</button>
-  <button id="stop" disabled>Stop</button>
+<section class="panel" aria-labelledby="h-rec">
+  <h2 id="h-rec"><span class="step">2</span>Recording</h2>
+  <div class="row">
+    <button id="record" class="primary" disabled>Record</button>
+    <button id="stop" disabled>Stop recording</button>
+  </div>
+  <p id="rec-state" class="notice" role="status" hidden></p>
+  <p id="status" class="muted">Samples 0 | Chunks confirmed 0 | Chunks pending 0 | Gaps 0 | Rejected lines 0</p>
+  <p id="notes" class="muted"></p>
 </section>
 
-<div id="simulated" hidden>SIMULATED</div>
-<canvas id="plot" width="1000" height="200"></canvas>
-<p id="status">Samples 0 | Chunks confirmed 0 | Chunks pending 0 | Gaps 0 | Rejected lines 0</p>
-<p id="notes"></p>
-<p id="error" role="alert"></p>
+<section class="panel" aria-labelledby="h-display">
+  <h2 id="h-display"><span class="step">3</span>Display</h2>
+  <div class="row">
+    <label for="method">Method</label>
+    <select id="method"></select>
+    <label for="band">Pulse band</label>
+    <select id="band">
+      <option value="wide">0.5 to 10 Hz (keeps the beat shape)</option>
+      <option value="narrow">0.7 to 3 Hz (smoother, loses detail)</option>
+    </select>
+  </div>
+  <h3 class="muted">Raw I and Q, last 10 s</h3>
+  <canvas id="plot" width="1000" height="160" aria-label="Raw I and Q"></canvas>
+  <h3 class="muted">Movement waveform (relative units). <strong>Display processing only. Not a measurement result.</strong></h3>
+  <div class="plots">
+    <canvas id="wave" class="wave" width="800" height="200" aria-label="Movement waveform"></canvas>
+    <canvas id="iq" class="iq" width="200" height="200" aria-label="I/Q plane"></canvas>
+  </div>
+  <p class="legend"><span class="swatch" style="background:#1b6ec2"></span>pulse band
+    <span class="swatch" style="background:#c2571b"></span>breathing band (0.1 to 0.5 Hz).
+    Right: I/Q plane of the same 10 s; an arc means the radar sees movement.</p>
+  <p id="proc-info" class="muted">Waiting for 2 s of samples.</p>
+</section>
+
+<p id="error" class="error" role="alert"></p>
+</main>
+<script src="guard.js"></script>
 <script type="module" src="app.js"></script>
 </body>
 </html>
