@@ -68,6 +68,11 @@ do not reopen it.
   gets the plugged-in board's session (preview, then Record). All pages share a top bar.
   Flashed 2026-11-18: the AtomS3R answers `BOARD?` (ID `CCBA97030AD4`). Spec:
   `docs/.superpowers/specs/2026-11-18-board-sessions-and-navigation-design.md`.
+- **Repo tidy-up and Cloudflare hosting (2026-11-19): spec written, not implemented.**
+  Phase 1 renames folders by role (`website/`, `firmware/`, `hosting/`, `docs/design/`)
+  and adds a top-level README and Makefile. Phase 2 serves the site from a free Cloudflare
+  Worker that forwards API calls to this laptop through Workers VPC. Spec:
+  `docs/.superpowers/specs/2026-11-19-tidy-up-and-cloudflare-hosting-design.md`.
 - The old roadmap's device profile is no longer the headline goal. Add a profile only
   if the website design needs one.
 
@@ -151,4 +156,8 @@ arduino-cli upload -p /dev/ttyACM0 --fqbn "$FQBN" arduino/radar_json
 - Never hand-edit `docs/reference/raw/`. Keep `claude/*.md` ≤ 400 lines with `## Sources`
   and an `INDEX.md` line (the linter enforces this).
 - Indonesian terms stay in Indonesian with an English gloss on first use.
+- **Claude may stage and commit its own work** whenever a unit of work is done (owner,
+  2026-11-19; replaces "do not commit" in `Local/claude.md` and the 2026-11-18 handover).
+  Stage only the files that work touched. **Never push without asking**: the GitHub repo
+  is public.
 - Commit messages end with the attribution lines the session gives you.
