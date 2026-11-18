@@ -1,0 +1,586 @@
+{
+  "generated": "2026-11-18T10:57:10.184Z",
+  "seeds": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "secondsPerRecord": 60,
+  "windowSeconds": 10,
+  "overallMedianShape": {
+    "single": 0.6863879516788642,
+    "pca": 0.762313249885018,
+    "arctan-mean": 0.11108932079433007,
+    "arctan-fit": 0.5605223405253121,
+    "dacm-fit": 0.16915721006598394,
+    "hybrid": 0.9240661377015964
+  },
+  "disqualified": {
+    "single": [
+      "chest-large"
+    ],
+    "pca": [
+      "chest-large"
+    ],
+    "arctan-mean": [
+      "neck-small",
+      "imbalance",
+      "dc-drift",
+      "quarter-arc"
+    ],
+    "arctan-fit": [
+      "dc-drift"
+    ],
+    "dacm-fit": [
+      "neck-small",
+      "imbalance",
+      "dc-drift"
+    ]
+  },
+  "winner": "hybrid",
+  "perScenario": {
+    "neck-small": {
+      "single": {
+        "shapeMedian": 0.9142535707960758,
+        "shapeP10": 0.8980507939849254,
+        "shapeNarrowMedian": 0.8485892731145028,
+        "breathingMedian": 0.9979526079828428,
+        "hybridArcWindows": 0,
+        "windows": 30
+      },
+      "pca": {
+        "shapeMedian": 0.9224100910438408,
+        "shapeP10": 0.9009789326233418,
+        "shapeNarrowMedian": 0.8563339735168369,
+        "breathingMedian": 0.9982417914809151,
+        "hybridArcWindows": 0,
+        "windows": 30
+      },
+      "arctan-mean": {
+        "shapeMedian": 0.056675593758083294,
+        "shapeP10": 0.0057652165778106675,
+        "shapeNarrowMedian": 0.07648849325485357,
+        "breathingMedian": 0.3582098116210121,
+        "hybridArcWindows": 0,
+        "windows": 30
+      },
+      "arctan-fit": {
+        "shapeMedian": 0.5189994264934958,
+        "shapeP10": 0.18453712624650193,
+        "shapeNarrowMedian": 0.4615029806313692,
+        "breathingMedian": 0.9881117077023394,
+        "hybridArcWindows": 0,
+        "windows": 30
+      },
+      "dacm-fit": {
+        "shapeMedian": 0.12244527704413229,
+        "shapeP10": 0.018135680493451302,
+        "shapeNarrowMedian": 0.1002491010266496,
+        "breathingMedian": 0.4717590339860529,
+        "hybridArcWindows": 0,
+        "windows": 30
+      },
+      "hybrid": {
+        "shapeMedian": 0.9224100910438408,
+        "shapeP10": 0.9009789326233418,
+        "shapeNarrowMedian": 0.8563339735168369,
+        "breathingMedian": 0.9982417914809151,
+        "hybridArcWindows": 0,
+        "windows": 30
+      }
+    },
+    "neck-weak": {
+      "single": {
+        "shapeMedian": 0.3743650939147966,
+        "shapeP10": 0.2968866888177069,
+        "shapeNarrowMedian": 0.45543620971669657,
+        "breathingMedian": 0.9597819296667857,
+        "hybridArcWindows": 0,
+        "windows": 30
+      },
+      "pca": {
+        "shapeMedian": 0.4199059275288811,
+        "shapeP10": 0.3445744413960662,
+        "shapeNarrowMedian": 0.5023537744793882,
+        "breathingMedian": 0.9709664703687401,
+        "hybridArcWindows": 0,
+        "windows": 30
+      },
+      "arctan-mean": {
+        "shapeMedian": 0.058426730967406026,
+        "shapeP10": 0.02032809246273485,
+        "shapeNarrowMedian": 0.056541967132558026,
+        "breathingMedian": 0.40202844343769994,
+        "hybridArcWindows": 0,
+        "windows": 30
+      },
+      "arctan-fit": {
+        "shapeMedian": 0.05482267945852595,
+        "shapeP10": 0.006916001687345359,
+        "shapeNarrowMedian": 0.05946269433978289,
+        "breathingMedian": 0.35644590420243005,
+        "hybridArcWindows": 0,
+        "windows": 30
+      },
+      "dacm-fit": {
+        "shapeMedian": 0.04822853896553943,
+        "shapeP10": 0.017881102725110766,
+        "shapeNarrowMedian": 0.053264040950178226,
+        "breathingMedian": 0.3798373818334184,
+        "hybridArcWindows": 0,
+        "windows": 30
+      },
+      "hybrid": {
+        "shapeMedian": 0.4199059275288811,
+        "shapeP10": 0.3445744413960662,
+        "shapeNarrowMedian": 0.5023537744793882,
+        "breathingMedian": 0.9709664703687401,
+        "hybridArcWindows": 0,
+        "windows": 30
+      }
+    },
+    "chest-large": {
+      "single": {
+        "shapeMedian": 0.09885184983931133,
+        "shapeP10": 0.030688308065373267,
+        "shapeNarrowMedian": 0.08775981014865251,
+        "breathingMedian": 0.9494120301034277,
+        "hybridArcWindows": 0,
+        "windows": 30
+      },
+      "pca": {
+        "shapeMedian": 0.10281231667769009,
+        "shapeP10": 0.01850626132145246,
+        "shapeNarrowMedian": 0.07973190497033342,
+        "breathingMedian": 0.9730623013726583,
+        "hybridArcWindows": 0,
+        "windows": 30
+      },
+      "arctan-mean": {
+        "shapeMedian": 0.9239151658448519,
+        "shapeP10": 0.8141526759085872,
+        "shapeNarrowMedian": 0.8055187833549646,
+        "breathingMedian": 0.9999298609767295,
+        "hybridArcWindows": 0,
+        "windows": 30
+      },
+      "arctan-fit": {
+        "shapeMedian": 0.9850785853146189,
+        "shapeP10": 0.9777307623730209,
+        "shapeNarrowMedian": 0.8419418989254817,
+        "breathingMedian": 0.9999943840338954,
+        "hybridArcWindows": 0,
+        "windows": 30
+      },
+      "dacm-fit": {
+        "shapeMedian": 0.9832639690306557,
+        "shapeP10": 0.9722891378013357,
+        "shapeNarrowMedian": 0.8408234113170934,
+        "breathingMedian": 0.9999865424026926,
+        "hybridArcWindows": 0,
+        "windows": 30
+      },
+      "hybrid": {
+        "shapeMedian": 0.9850785853146189,
+        "shapeP10": 0.9777307623730209,
+        "shapeNarrowMedian": 0.8419418989254817,
+        "breathingMedian": 0.9999943840338954,
+        "hybridArcWindows": 30,
+        "windows": 30
+      }
+    },
+    "imbalance": {
+      "single": {
+        "shapeMedian": 0.892019016780401,
+        "shapeP10": 0.8554927089473532,
+        "shapeNarrowMedian": 0.8445619127489048,
+        "breathingMedian": 0.9974596449792046,
+        "hybridArcWindows": 0,
+        "windows": 30
+      },
+      "pca": {
+        "shapeMedian": 0.9266794063741765,
+        "shapeP10": 0.9059994658174358,
+        "shapeNarrowMedian": 0.8685242161243744,
+        "breathingMedian": 0.9979420693462788,
+        "hybridArcWindows": 0,
+        "windows": 30
+      },
+      "arctan-mean": {
+        "shapeMedian": 0.08172387140486935,
+        "shapeP10": 0.017789284341915516,
+        "shapeNarrowMedian": 0.08746760364849385,
+        "breathingMedian": 0.32028951805876127,
+        "hybridArcWindows": 0,
+        "windows": 30
+      },
+      "arctan-fit": {
+        "shapeMedian": 0.5656210376921227,
+        "shapeP10": 0.2343169490120236,
+        "shapeNarrowMedian": 0.5023226293707257,
+        "breathingMedian": 0.9921786977412104,
+        "hybridArcWindows": 0,
+        "windows": 30
+      },
+      "dacm-fit": {
+        "shapeMedian": 0.15266205052520596,
+        "shapeP10": 0.060598863343084286,
+        "shapeNarrowMedian": 0.12904823028072318,
+        "breathingMedian": 0.455895154462032,
+        "hybridArcWindows": 0,
+        "windows": 30
+      },
+      "hybrid": {
+        "shapeMedian": 0.9266794063741765,
+        "shapeP10": 0.9059994658174358,
+        "shapeNarrowMedian": 0.8685242161243744,
+        "breathingMedian": 0.9979420693462788,
+        "hybridArcWindows": 0,
+        "windows": 30
+      }
+    },
+    "dc-drift": {
+      "single": {
+        "shapeMedian": 0.8989783392571995,
+        "shapeP10": 0.763423050228223,
+        "shapeNarrowMedian": 0.8731404065163082,
+        "breathingMedian": 0.9957077853993392,
+        "hybridArcWindows": 0,
+        "windows": 30
+      },
+      "pca": {
+        "shapeMedian": 0.9057329298177893,
+        "shapeP10": 0.844317192459669,
+        "shapeNarrowMedian": 0.8769623709700828,
+        "breathingMedian": 0.9977710700129465,
+        "hybridArcWindows": 0,
+        "windows": 30
+      },
+      "arctan-mean": {
+        "shapeMedian": 0.07211825835392116,
+        "shapeP10": 0.01600708841980468,
+        "shapeNarrowMedian": 0.08224627655915515,
+        "breathingMedian": 0.27239348634904925,
+        "hybridArcWindows": 0,
+        "windows": 30
+      },
+      "arctan-fit": {
+        "shapeMedian": 0.11410095134470802,
+        "shapeP10": 0.009189407348966245,
+        "shapeNarrowMedian": 0.15323047982839702,
+        "breathingMedian": 0.39668793726532914,
+        "hybridArcWindows": 0,
+        "windows": 30
+      },
+      "dacm-fit": {
+        "shapeMedian": 0.07433903402712744,
+        "shapeP10": 0.0051807411528664955,
+        "shapeNarrowMedian": 0.08886067486583299,
+        "breathingMedian": 0.48794039078612617,
+        "hybridArcWindows": 0,
+        "windows": 30
+      },
+      "hybrid": {
+        "shapeMedian": 0.9057329298177893,
+        "shapeP10": 0.844317192459669,
+        "shapeNarrowMedian": 0.8769623709700828,
+        "breathingMedian": 0.9977710700129465,
+        "hybridArcWindows": 0,
+        "windows": 30
+      }
+    },
+    "quarter-arc": {
+      "single": {
+        "shapeMedian": 0.5041309812821415,
+        "shapeP10": 0.1997240803599529,
+        "shapeNarrowMedian": 0.5431106617301531,
+        "breathingMedian": 0.9982072074168498,
+        "hybridArcWindows": 0,
+        "windows": 30
+      },
+      "pca": {
+        "shapeMedian": 0.6372256243328049,
+        "shapeP10": 0.47595487105539763,
+        "shapeNarrowMedian": 0.5531070117474599,
+        "breathingMedian": 0.9998272962035946,
+        "hybridArcWindows": 0,
+        "windows": 30
+      },
+      "arctan-mean": {
+        "shapeMedian": 0.19911214592314413,
+        "shapeP10": 0.11086481038326283,
+        "shapeNarrowMedian": 0.16341308810822988,
+        "breathingMedian": 0.9977028100903342,
+        "hybridArcWindows": 0,
+        "windows": 30
+      },
+      "arctan-fit": {
+        "shapeMedian": 0.9386111294371378,
+        "shapeP10": 0.9264969235757976,
+        "shapeNarrowMedian": 0.8109987590620973,
+        "breathingMedian": 0.9999581422175111,
+        "hybridArcWindows": 0,
+        "windows": 30
+      },
+      "dacm-fit": {
+        "shapeMedian": 0.9285985326081369,
+        "shapeP10": 0.9126622358990015,
+        "shapeNarrowMedian": 0.8036252369302226,
+        "breathingMedian": 0.9999115357687088,
+        "hybridArcWindows": 0,
+        "windows": 30
+      },
+      "hybrid": {
+        "shapeMedian": 0.9386111294371378,
+        "shapeP10": 0.9264969235757976,
+        "shapeNarrowMedian": 0.8109987590620973,
+        "breathingMedian": 0.9999581422175111,
+        "hybridArcWindows": 30,
+        "windows": 30
+      }
+    },
+    "neck-weak-avg16": {
+      "single": {
+        "shapeMedian": 0.8672013164209216,
+        "shapeP10": 0.7827324209584307,
+        "shapeNarrowMedian": 0.8402043151200511,
+        "breathingMedian": 0.9964492898769958,
+        "hybridArcWindows": 0,
+        "windows": 30
+      },
+      "pca": {
+        "shapeMedian": 0.8840025068073032,
+        "shapeP10": 0.8319991016696106,
+        "shapeNarrowMedian": 0.8502614462047917,
+        "breathingMedian": 0.9967608472218399,
+        "hybridArcWindows": 0,
+        "windows": 30
+      },
+      "arctan-mean": {
+        "shapeMedian": 0.05384800133345636,
+        "shapeP10": 0.016037839028249325,
+        "shapeNarrowMedian": 0.06061832278183717,
+        "breathingMedian": 0.49184589313798677,
+        "hybridArcWindows": 0,
+        "windows": 30
+      },
+      "arctan-fit": {
+        "shapeMedian": 0.15695061434758462,
+        "shapeP10": 0.032086328934339256,
+        "shapeNarrowMedian": 0.1441110301712923,
+        "breathingMedian": 0.5246147652453892,
+        "hybridArcWindows": 0,
+        "windows": 30
+      },
+      "dacm-fit": {
+        "shapeMedian": 0.09679741837088839,
+        "shapeP10": 0.026609933880343318,
+        "shapeNarrowMedian": 0.10184565798424063,
+        "breathingMedian": 0.41752277337856447,
+        "hybridArcWindows": 0,
+        "windows": 30
+      },
+      "hybrid": {
+        "shapeMedian": 0.8840025068073032,
+        "shapeP10": 0.8319991016696106,
+        "shapeNarrowMedian": 0.8502614462047917,
+        "breathingMedian": 0.9967608472218399,
+        "hybridArcWindows": 0,
+        "windows": 30
+      }
+    }
+  },
+  "guardSweep": [
+    {
+      "respMm": 0.3,
+      "arcDeg": 17.28,
+      "arcUsed": 0,
+      "windows": 30,
+      "median": {
+        "pca": 0.917859979245053,
+        "arctan-fit": 0.33565206449677637,
+        "hybrid": 0.917859979245053
+      },
+      "hybridMin": 0.861191073214822
+    },
+    {
+      "respMm": 0.5,
+      "arcDeg": 28.800000000000004,
+      "arcUsed": 2,
+      "windows": 30,
+      "median": {
+        "pca": 0.9172340201174944,
+        "arctan-fit": 0.8127164824322852,
+        "hybrid": 0.9171245461950812
+      },
+      "hybridMin": 0.8356698636582993
+    },
+    {
+      "respMm": 0.7,
+      "arcDeg": 40.32,
+      "arcUsed": 30,
+      "windows": 30,
+      "median": {
+        "pca": 0.9214072661334088,
+        "arctan-fit": 0.9129536559286626,
+        "hybrid": 0.9129536559286626
+      },
+      "hybridMin": 0.8579725182927289
+    },
+    {
+      "respMm": 0.9,
+      "arcDeg": 51.839999999999996,
+      "arcUsed": 30,
+      "windows": 30,
+      "median": {
+        "pca": 0.9155934200285676,
+        "arctan-fit": 0.9247879305580622,
+        "hybrid": 0.9247879305580622
+      },
+      "hybridMin": 0.8726163920573152
+    },
+    {
+      "respMm": 1.1,
+      "arcDeg": 63.36000000000001,
+      "arcUsed": 30,
+      "windows": 30,
+      "median": {
+        "pca": 0.9083243665150189,
+        "arctan-fit": 0.929289072840016,
+        "hybrid": 0.929289072840016
+      },
+      "hybridMin": 0.9013841857167216
+    },
+    {
+      "respMm": 1.4,
+      "arcDeg": 80.64,
+      "arcUsed": 30,
+      "windows": 30,
+      "median": {
+        "pca": 0.8643108063700287,
+        "arctan-fit": 0.9314213083225977,
+        "hybrid": 0.9314213083225977
+      },
+      "hybridMin": 0.8646358351988469
+    },
+    {
+      "respMm": 1.8,
+      "arcDeg": 103.67999999999999,
+      "arcUsed": 30,
+      "windows": 30,
+      "median": {
+        "pca": 0.7831366465313354,
+        "arctan-fit": 0.9479298478434812,
+        "hybrid": 0.9479298478434812
+      },
+      "hybridMin": 0.9240182796550017
+    },
+    {
+      "respMm": 2.5,
+      "arcDeg": 144,
+      "arcUsed": 30,
+      "windows": 30,
+      "median": {
+        "pca": 0.4465408533572642,
+        "arctan-fit": 0.9552852933745042,
+        "hybrid": 0.9552852933745042
+      },
+      "hybridMin": 0.9090243726812053
+    },
+    {
+      "respMm": 3.5,
+      "arcDeg": 201.60000000000002,
+      "arcUsed": 30,
+      "windows": 30,
+      "median": {
+        "pca": 0.25858552096973,
+        "arctan-fit": 0.9819493109734608,
+        "hybrid": 0.9819493109734608
+      },
+      "hybridMin": 0.9397916913503539
+    }
+  ],
+  "msPerWindow": {
+    "single": 0.2646623666666638,
+    "pca": 0.21054304761904538,
+    "arctan-mean": 0.2917797714285719,
+    "arctan-fit": 0.3577197047619001,
+    "dacm-fit": 0.33894027619047473,
+    "hybrid": 0.32243381428571977
+  },
+  "real": {
+    "file": "data/rabits_Sep_15_1519.csv",
+    "windows": [
+      {
+        "startS": 0,
+        "eigenRatio": 6.784054543305315,
+        "radiusMv": 4.961613767708012,
+        "residualFrac": 0.31415518791481534,
+        "spanDeg": 474.47495282831943,
+        "hybridUsed": "pca",
+        "finite": true,
+        "agreeWithWinner": {
+          "single": 0.9567981630316528,
+          "pca": 1,
+          "arctan-mean": 0.4242019192700948,
+          "arctan-fit": 0.2842986372784334,
+          "dacm-fit": 0.41774352814707444,
+          "hybrid": 1
+        }
+      },
+      {
+        "startS": 10,
+        "eigenRatio": 14.079024666153035,
+        "radiusMv": 6.247561145428533,
+        "residualFrac": 0.40602410725005716,
+        "spanDeg": 1251.6648863645478,
+        "hybridUsed": "pca",
+        "finite": true,
+        "agreeWithWinner": {
+          "single": 0.9619670623085509,
+          "pca": 1,
+          "arctan-mean": 0.2978250805930648,
+          "arctan-fit": 0.28313093934960015,
+          "dacm-fit": 0.14337662525736516,
+          "hybrid": 1
+        }
+      },
+      {
+        "startS": 20,
+        "eigenRatio": 10.045781570336946,
+        "radiusMv": 5.165152824625137,
+        "residualFrac": 0.3681252332424088,
+        "spanDeg": 1130.0604483265925,
+        "hybridUsed": "pca",
+        "finite": true,
+        "agreeWithWinner": {
+          "single": 0.9520618001971454,
+          "pca": 1,
+          "arctan-mean": 0.2628102422392977,
+          "arctan-fit": 0.25210982920795144,
+          "dacm-fit": 0.23549392389821697,
+          "hybrid": 1
+        }
+      },
+      {
+        "startS": 30,
+        "eigenRatio": 22.728711527952058,
+        "radiusMv": 5.709587352545774,
+        "residualFrac": 0.3641090528876892,
+        "spanDeg": 927.7210208569267,
+        "hybridUsed": "pca",
+        "finite": true,
+        "agreeWithWinner": {
+          "single": 0.9672032286574043,
+          "pca": 1,
+          "arctan-mean": 0.1575654411376188,
+          "arctan-fit": 0.19823504747678364,
+          "dacm-fit": 0.3579818147306952,
+          "hybrid": 1
+        }
+      }
+    ]
+  }
+}

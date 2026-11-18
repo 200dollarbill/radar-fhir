@@ -33,3 +33,33 @@ test("points stay inside width and height", () => {
 test("an empty trace has no points", () => {
   assert.deepEqual(new Trace().points(100, 50), { i: [], q: [] });
 });
+
+test("seriesPoints maps +3 SD to the top and -3 SD to the bottom, clamped", async () => {
+  const { seriesPoints } = await import("../src/plot.js");
+  const p = seriesPoints([3, 0, -3, 10, -10], 400, 100);
+  assert.deepEqual(p.map(([, y]) => y), [0, 50, 100, 0, 100]);
+  assert.equal(p[0][0], 0);
+  assert.equal(p[4][0], 400);
+  assert.deepEqual(seriesPoints([], 400, 100), []);
+});
+
+test("scatterTransform keeps equal aspect and stays inside the canvas", async () => {
+  const { scatterTransform } = await import("../src/plot.js");
+  const I = [1.0, 1.002, 1.002, 1.0];
+  const Q = [2.0, 2.0, 2.002, 2.002];
+  const t = scatterTransform(I, Q, 300, 200);
+  const pts = I.map((v, k) => t.map(v, Q[k]));
+  const dx = Math.abs(pts[1][0] - pts[0][0]);
+  const dy = Math.abs(pts[2][1] - pts[1][1]);
+  assert.ok(Math.abs(dx - dy) < 1e-9 && dx > 0);
+  for (const [x, y] of pts) assert.ok(x >= 0 && x <= 300 && y >= 0 && y <= 200);
+  // Q grows upward on screen
+  assert.ok(pts[2][1] < pts[1][1]);
+});
+
+test("scatterTransform ignores NaN and survives a single point", async () => {
+  const { scatterTransform } = await import("../src/plot.js");
+  const t = scatterTransform([1, NaN, 1], [2, NaN, 2], 100, 100);
+  const [x, y] = t.map(1, 2);
+  assert.ok(Number.isFinite(x) && Number.isFinite(y));
+});
