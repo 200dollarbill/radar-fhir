@@ -6,9 +6,13 @@ const PAGES = [
   { href: "review.html", label: "Review", files: ["review.html"] },
 ];
 
+// Cloudflare's static assets serve sessions.html at /capture/sessions, so the
+// match ignores a trailing .html.
+const bare = (f) => f.replace(/\.html$/, "");
+
 export function navItems(path) {
-  const file = String(path).split("/").pop();
-  return PAGES.map(({ href, label, files }) => ({ href, label, current: files.includes(file) }));
+  const file = bare(String(path).split("/").pop());
+  return PAGES.map(({ href, label, files }) => ({ href, label, current: files.map(bare).includes(file) }));
 }
 
 export function userLabel(auth) {

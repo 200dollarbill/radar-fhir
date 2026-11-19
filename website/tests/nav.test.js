@@ -2,6 +2,14 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { navItems, userLabel } from "../src/nav.js";
 
+test("the current page is marked at the hosted addresses without .html", () => {
+  const current = (p) => navItems(p).filter((i) => i.current).map((i) => i.label);
+  assert.deepEqual(current("/capture/sessions"), ["Sessions"]);
+  assert.deepEqual(current("/capture/review"), ["Review"]);
+  assert.deepEqual(current("/capture/"), ["Capture"]);
+  assert.deepEqual(current("/capture/index"), ["Capture"]);
+});
+
 test("the bar lists Sessions, Capture, Review and marks the current page", () => {
   const labels = (p) => navItems(p).map((i) => i.label + (i.current ? "*" : ""));
   assert.deepEqual(labels("/capture/"), ["Sessions", "Capture*", "Review"]);
