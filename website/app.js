@@ -10,6 +10,7 @@ import { parseLine } from "./src/jsonlines.js";
 import { LineHub } from "./src/hub.js";
 import { requestBoard } from "./src/board.js";
 import { loadAuth, clearAuth, authHeaders } from "./src/auth.js";
+import { apiError } from "./src/outcome.js";
 import { renderNav } from "./src/nav.js";
 import { Trace, draw, drawSeries, drawScatter } from "./src/plot.js";
 import { coalesce } from "./src/coalesce.js";
@@ -103,7 +104,7 @@ async function checkSession() {
       "warn", "no-session");
   } else {
     card = null;
-    setBoardMsg(`Board ${board.id}: the server answered HTTP ${res.status}.`, "warn", "no-session");
+    setBoardMsg(`Board ${board.id}: ${await apiError(res)}`, "warn", "no-session");
   }
 }
 
@@ -117,7 +118,7 @@ async function registerBoard() {
     body: JSON.stringify({ id: board.id, key: board.key }),
   });
   if (res.status !== 200 && res.status !== 201) {
-    showError(`Could not register board ${board.id}: HTTP ${res.status}.`);
+    showError(`Could not register board ${board.id}: ${await apiError(res)}`);
     return;
   }
   await checkSession();

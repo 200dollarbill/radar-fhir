@@ -24,11 +24,4 @@ export function fmtTime(iso) {
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 
-export async function apiError(res) {
-  try {
-    const oo = JSON.parse(await res.text());
-    const text = (oo.issue ?? []).map((i) => i?.details?.text).find((t) => typeof t === "string" && t);
-    if (text) return text;
-  } catch { /* not an OperationOutcome */ }
-  return `HTTP ${res.status}`;
-}
+export { apiError } from "./outcome.js";

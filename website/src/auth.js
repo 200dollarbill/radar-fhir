@@ -1,6 +1,8 @@
 // Login shared by every page of the site: the JWT lives in sessionStorage, so
 // closing the tab logs out (spec B11).
 
+import { apiError } from "./outcome.js";
+
 const KEY = "prata-auth";
 
 export function decodeJwt(token) {
@@ -20,7 +22,8 @@ export async function login(fetchFn, username, password) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username, password }),
   });
-  if (!res.ok) throw new Error("Login failed: wrong username or password.");
+  if (res.status === 401) throw new Error("Login failed: wrong username or password.");
+  if (!res.ok) throw new Error(`Login failed: ${await apiError(res)}`);
   const { access_token: token } = await res.json();
   const claims = decodeJwt(token) ?? {};
   return { token, username, role: claims.role ?? null, ref: claims.ref ?? null, expiresAt: (claims.exp ?? 0) * 1000 };

@@ -33,6 +33,21 @@ test("a failed login says so", async () => {
   await assert.rejects(login(async () => ({ ok: false, status: 401 }), "x", "y"), /wrong username or password/);
 });
 
+const failing = (status, body) => async () => ({ ok: false, status, text: async () => body });
+
+test("a 401 login keeps the wrong-password message", async () => {
+  await assert.rejects(login(failing(401, ""), "x", "y"), { message: "Login failed: wrong username or password." });
+});
+
+test("a throttled login shows the server's message", async () => {
+  const body = JSON.stringify({ resourceType: "OperationOutcome", issue: [{ severity: "error", code: "throttled", details: { text: "Too many login attempts. Try again in a minute." } }] });
+  await assert.rejects(login(failing(429, body), "x", "y"), { message: "Login failed: Too many login attempts. Try again in a minute." });
+});
+
+test("a login that reaches no server shows the status", async () => {
+  await assert.rejects(login(failing(503, "<html>"), "x", "y"), { message: "Login failed: HTTP 503" });
+});
+
 test("saved login is returned until it expires, then dropped", () => {
   const s = memStorage();
   const a = { token: "t", username: "admin", role: "admin", ref: null, expiresAt: 5000 };
