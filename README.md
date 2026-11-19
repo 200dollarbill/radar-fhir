@@ -42,6 +42,7 @@ PRATA/
 ├── fhir_server/     the server (Python, FastAPI): stores and checks all data
 ├── website/         the pages: Sessions, Capture, Review (served at /capture/)
 ├── firmware/        radar_json/: the AtomS3R board's program
+├── hosting/         the Cloudflare Worker that puts the website online
 ├── device_client/   a Python stand-in for the board, used by tests
 ├── tests/           server tests
 ├── tools/scrape/    scraper and linter for the FHIR/SATUSEHAT reference pages
@@ -60,12 +61,14 @@ PRATA/
 
 ```
 make help       list commands
-make setup      create .venv and install the server
+make setup      create .venv, install the server and the hosting tools
 make server     run the server on http://127.0.0.1:8000 (website at /capture/)
 make test       run every test suite
 make firmware   compile the board firmware
 make flash      compile and upload to the board (PORT=/dev/ttyACM0)
 make eval       rescore the display methods (rewrites docs/eval/)
+make tunnel     connect this laptop to Cloudflare (keep running next to `make server`)
+make deploy     build the website and deploy the Worker
 ```
 
 ## Secrets
