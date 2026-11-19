@@ -78,6 +78,24 @@ def make_test_patient(svc: FhirService, label):
     raise _err(500, "could not allocate a unique synthetic NIK", "exception")
 
 
+def make_test_practitioner(svc: FhirService, name):
+    """Practitioner for a doctor account, with a generated 9900... NIK."""
+    for _ in range(10):
+        nik = "9900" + "".join(secrets.choice("0123456789") for _ in range(12))
+        try:
+            _, prac, _ = svc.create(ADMIN, "Practitioner", {
+                "resourceType": "Practitioner",
+                "identifier": [{"use": "official",
+                                "system": "https://fhir.kemkes.go.id/id/nik",
+                                "value": nik}],
+                "name": [{"use": "official", "text": name}]})
+            return prac
+        except FhirError as exc:
+            if exc.status != 409:
+                raise
+    raise _err(500, "could not allocate a unique synthetic NIK", "exception")
+
+
 def open_visit(svc: FhirService, principal, patient_id, practitioner_ref, label):
     """An Encounter created as arrived and moved to in-progress. Returns its id."""
     org = (res.list(svc.conn, "Organization") or [None])[0]
