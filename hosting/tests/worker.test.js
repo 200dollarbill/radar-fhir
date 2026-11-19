@@ -121,3 +121,45 @@ test("unreachable laptop gives 503", async () => {
   assert.equal(res.headers.get("Retry-After"), "30");
   await assertOutcome(res, 503, "transient");
 });
+
+// Final review: uvicorn routes on the percent-decoded path, so every check runs on it.
+test("encoded admin paths are refused too", async () => {
+  for (const path of ["/fhir-r4/v1/admin%2Faccounts", "/fhir-r4/v1/admin%2faccounts",
+    "/fhir-r4/v1/%61dmin/accounts", "/fhir-r4%2Fv1/admin/accounts", "/fhir-r4/v1/admin"]) {
+    const e = env();
+    const res = await call(new Request(`https://x.dev${path}`, { method: "POST", body: "{}" }), e);
+    assert.equal(res.status, 403, path);
+    assert.equal(e.LAPTOP.requests.length, 0, path);
+  }
+});
+
+test("encoded login paths are rate limited too", async () => {
+  for (const path of ["/auth%2Ftoken", "/auth/%74oken"]) {
+    const e = env({ lim: limiter(false) });
+    const res = await call(new Request(`https://x.dev${path}`, { method: "POST", body: "{}" }), e);
+    assert.equal(res.status, 429, path);
+    assert.equal(e.LAPTOP.requests.length, 0, path);
+  }
+});
+
+test("paths outside the API get 404 and never reach the laptop", async () => {
+  for (const path of ["/openapi.json", "/docs", "/capture/tests/auth.test.js", "/capture/package.json", "/authx", "/fhir-r4x/v1/metadata"]) {
+    const e = env();
+    const res = await call(new Request(`https://x.dev${path}`), e);
+    assert.equal(res.status, 404, path);
+    assert.equal(e.LAPTOP.requests.length, 0, path);
+  }
+});
+
+test("a malformed encoded path gets 400", async () => {
+  const e = env();
+  const res = await call(new Request("https://x.dev/fhir-r4/v1/%E0%A4%A"), e);
+  assert.equal(res.status, 400);
+  assert.equal(e.LAPTOP.requests.length, 0);
+});
+
+test("forwarded requests are marked as coming from the public site", async () => {
+  const e = env();
+  await call(new Request("https://x.dev/api/sessions", { headers: { "X-PRATA-Public": "0" } }), e);
+  assert.equal(e.LAPTOP.requests[0].headers.get("X-PRATA-Public"), "1");
+});

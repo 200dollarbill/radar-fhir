@@ -37,7 +37,8 @@ guide also covers flashing the board, recording and troubleshooting.
 
 The same website is online at <https://prata.haifa.workers.dev>. Anyone can open it, but
 only accounts you create can log in (`docs/accounts/`). The data stays in this laptop's
-database: the site is a Cloudflare Worker that passes every request to the laptop.
+database: Cloudflare serves the pages, and a Worker passes API calls to the laptop.
+Before the first time online, follow *Before going public* in `docs/RUN-GUIDE.md`.
 
 It works only while the laptop runs both, each in its own terminal:
 

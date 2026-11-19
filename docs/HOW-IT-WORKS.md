@@ -74,7 +74,10 @@ Step by step:
    tries and keeps the chunk. Closing the tab does not lose it.
 7. **Hosted only: the Worker passes the request on** (`hosting/src/worker.js`). It
    forwards the method, path, query, headers and body unchanged to the laptop through the
-   tunnel, drops cookies, and passes the answer back.
+   tunnel, drops cookies, marks the request as coming from the internet
+   (`X-PRATA-Public: 1`), and passes the answer back. It checks the address after
+   undoing percent-encoding, the same way the server reads it, so `%2F` tricks do not
+   get past its rules.
 8. **The server checks and stores.** It works out who is asking
    (`fhir_server/routes/deps.py`): a board key may only write into its own open session.
    It checks the Observation against the rules (`fhir_server/validation/`) and stores it
@@ -144,7 +147,8 @@ Nothing is written to CSV or WAV. To get a recording out, search its Observation
 |---|---|---|
 | The laptop server is stopped, or the tunnel is down (hosted) | The Worker answers 503 *PRATA server is offline (laptop off or tunnel down).* The Capture page shows *Server unreachable, retrying.* | Chunks wait in the browser's outbox and upload when the server is back. Each chunk has a fixed identifier, so a chunk sent twice is stored once |
 | Too many logins from one address (hosted) | *Login failed: Too many login attempts. Try again in a minute.* | The Worker answers 429 without asking the laptop. Cloudflare counts approximately, so a slow guesser may never hit it (see `docs/design/specs/2026-11-19-tidy-up-and-cloudflare-hosting-design.md`, live check results) |
-| Someone calls the account API from the web | 403 *Account management is only available on the PRATA laptop.* | Accounts are managed only with the laptop commands |
+| Someone calls the account API from the web | 403 *Account management is only available on the PRATA laptop.* | Refused twice: by the Worker, and by the server for any request the Worker marked as public (`fhir_server/routes/admin.py`). Accounts are managed only with the laptop commands |
+| An address that is neither a page nor an API call (hosted) | 404 *Not found.* | The Worker answers itself; the laptop never sees it |
 | The server rejects a record | The server's own message, for example a missing field | Nothing is written. The page shows the message |
 | The login expires (after one hour) | The Sessions page shows the login form again | Recording keeps uploading: the board key, not your login, sends the chunks |
 

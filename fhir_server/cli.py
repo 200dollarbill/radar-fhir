@@ -73,7 +73,8 @@ def cmd_seed(args):
         "name": [{"use": "official", "text": "drg. Contoh, Sp.JP",
                   "family": "Contoh", "given": ["Contoh"]}],
         "gender": "male", "birthDate": "1980-05-05"})
-    doctor_password = os.environ.get("FHIR_DOCTOR_PASSWORD", "doctor-pw")
+    doctor_password = os.environ.get("FHIR_DOCTOR_PASSWORD") \
+        or secrets.token_urlsafe(12)
     accounts.create(conn, "doctor", hash_password(doctor_password), "doctor",
                     f"Practitioner/{doc_id}")
 
@@ -102,7 +103,8 @@ def cmd_seed(args):
                     {"url": "village", "valueCode": "317101001"},
                     {"url": "rt", "valueCode": "001"},
                     {"url": "rw", "valueCode": "001"}]}]}]})
-    patient_password = os.environ.get("FHIR_PATIENT_PASSWORD", "patient-pw")
+    patient_password = os.environ.get("FHIR_PATIENT_PASSWORD") \
+        or secrets.token_urlsafe(12)
     accounts.create(conn, "patient", hash_password(patient_password), "patient",
                     f"Patient/{pat_id}")
 

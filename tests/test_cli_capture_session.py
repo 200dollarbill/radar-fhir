@@ -18,7 +18,9 @@ SECRET = "cap-secret-0123456789-0123456789abcdef"
 def seeded(tmp_path):
     db = str(tmp_path / "cap.db")
     env = {"FHIR_DB_PATH": db, "FHIR_JWT_SECRET": SECRET,
-           "FHIR_ADMIN_PASSWORD": "admin-pass-1"}
+           "FHIR_ADMIN_PASSWORD": "admin-pass-1",
+           # seed makes random ones otherwise; tests log in with these
+           "FHIR_DOCTOR_PASSWORD": "doctor-pw", "FHIR_PATIENT_PASSWORD": "patient-pw"}
     p = run_cli(["seed", "--reset"], env)
     assert p.returncode == 0, p.stderr
     return {"db": db, "env": env, "seed": json.loads(p.stdout.splitlines()[-1])}

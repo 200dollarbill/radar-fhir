@@ -169,8 +169,10 @@ Worker's address is HTTPS, which Web Serial requires.
 ### `hosting/`
 
 - `wrangler.jsonc`: name `prata`; `workers_dev: true`; `preview_urls: false`; assets from
-  `./public` with `run_worker_first: ["/auth/*", "/api/*", "/fhir-r4/*"]` (only these
-  run Worker code; static requests are free and unlimited); `vpc_services` binding
+  `./public` with `run_worker_first: ["/auth/*", "/api/*", "/fhir-r4/*"]` (these run Worker
+  code before any asset lookup; static requests are free and unlimited. Corrected after the
+  final review: any address that matches no asset also runs the Worker, which answers 404
+  outside the three API prefixes); `vpc_services` binding
   `LAPTOP` (service ID from setup step 3; an account resource ID, not a secret);
   `ratelimits` binding `LOGIN_LIMIT` (simple, limit 10, period 60).
 - `src/worker.js`: plain JS, no build step, about 100 lines.
@@ -184,9 +186,11 @@ Worker's address is HTTPS, which Web Serial requires.
 
 | Request | Worker response |
 |---|---|
-| `/fhir-r4/v1/admin/*` | 403 OperationOutcome: account management is only on the laptop. Never forwarded |
+| any | The rules below match the percent-decoded path (the server routes on it); a path that cannot be decoded gets 400. Added after the final review |
+| `/fhir-r4/v1/admin` and `/fhir-r4/v1/admin/*` | 403 OperationOutcome: account management is only on the laptop. Never forwarded. The server also refuses the admin routes for any request carrying `X-PRATA-Public`, which the Worker sets on everything it forwards |
+| not under `/auth/`, `/api/`, `/fhir-r4/` | 404 OperationOutcome `Not found.` Never forwarded |
 | `POST /auth/token` | `LOGIN_LIMIT.limit({key: CF-Connecting-IP})` (key `"unknown"` if the header is missing, so such requests share one budget); over the limit: 429, `Retry-After: 60`. Otherwise forwarded |
-| other `/auth/*`, `/api/*`, `/fhir-r4/*` | Forwarded to `LAPTOP` unchanged: method, path, query, headers, streamed body; `Cookie` dropped. The answer is passed back as is, plus `X-Content-Type-Options: nosniff` |
+| other `/auth/*`, `/api/*`, `/fhir-r4/*` | Forwarded to `LAPTOP` unchanged: method, path, query, headers, streamed body; `Cookie` dropped; `X-PRATA-Public: 1` set. The answer is passed back as is, plus `X-Content-Type-Options: nosniff` |
 | laptop unreachable | 503 OperationOutcome, `Retry-After: 30`: "PRATA server is offline (laptop off or tunnel down)" |
 
 Errors made by the Worker are OperationOutcome (`application/fhir+json`), like the
@@ -333,5 +337,25 @@ a trailing `.html` (commit `8bc52f3`).
 Open: **check 2.** A slow password guesser is not stopped by the Worker. Options for the
 owner: a per-username lockout in the server (strict, free, local), or a Durable Object
 limiter in the Worker. Neither is built; the owner decides.
+
+### Final review findings and re-check (2026-11-19)
+
+The whole-branch review found that checks 2 and 3 had only tried the plain path. The
+server routes on the percent-decoded path, so the Worker's raw-path rules could be skipped:
+`/fhir-r4/v1/admin%2Faccounts` reached the admin routes (an admin token could create an
+account through the public site), and `/auth%2Ftoken` skipped the login limit. It also
+found that every address that is not a page reached the laptop (`/openapi.json`,
+`/capture/tests/...`), and that seeded `doctor` and `patient` logins kept the published
+passwords `doctor-pw` and `patient-pw` (true of the real database, checked read-only).
+
+Fixed: the Worker decodes the path once and applies every rule to it, answers 400 for an
+undecodable path and 404 outside `/auth/`, `/api/`, `/fhir-r4/`, and sets
+`X-PRATA-Public: 1` on what it forwards; the server refuses the admin routes for any
+request carrying that header; `seed` makes random doctor and patient passwords. Re-check
+against the deployed Worker (laptop off): `admin/accounts`, `admin%2Faccounts`,
+`admin%2faccounts`, `%61dmin/accounts`, `fhir-r4%2Fv1/admin/accounts` all 403;
+`/openapi.json`, `/docs`, `/capture/tests/auth.test.js` 404; a malformed path 400; 100
+logins to `/auth%2Ftoken` at concurrency 10: 10 × 429. The real database's `doctor` and
+`patient` passwords are the owner's to change (`docs/RUN-GUIDE.md`, *Before going public*).
 
 Owner check, not yet done: the real board over Web Serial on the hosted address.

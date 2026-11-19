@@ -122,8 +122,8 @@ Open <http://127.0.0.1:8000/capture/sessions.html> and log in.
 | Account | Password | Can |
 |---|---|---|
 | `admin` | `FHIR_ADMIN_PASSWORD` at seed time (see the setup note above) | everything: register boards, create test patients, open and end any session, choose the doctor |
-| `doctor` | `doctor-pw` unless `FHIR_DOCTOR_PASSWORD` was set at seed time | open sessions for patients they already take part in, end their own sessions |
-| `patient` | `patient-pw` unless `FHIR_PATIENT_PASSWORD` was set at seed time | not this page (FHIR API only, own records) |
+| `doctor` | random, printed by `seed` (`doctor_password`), unless `FHIR_DOCTOR_PASSWORD` was set | open sessions for patients they already take part in, end their own sessions |
+| `patient` | random, printed by `seed` (`patient_password`), unless `FHIR_PATIENT_PASSWORD` was set | not this page (FHIR API only, own records) |
 
 *Login failed: wrong username or password* means exactly that. Reloading the page does not
 help. Run `set-password` (setup note above).
@@ -214,8 +214,30 @@ Each role has its own guide there (admin, doctor, patient).
 ## Hosted site (https://prata.haifa.workers.dev)
 
 The website is also online. Anyone can open it; only your accounts can log in. Data stays
-in `data/fhir_server.db` on this laptop: the Cloudflare Worker passes every request to the
-laptop through a tunnel. How it fits together: `docs/HOW-IT-WORKS.md`, section 7.
+in `data/fhir_server.db` on this laptop. Cloudflare serves the pages; the Worker passes API
+calls to the laptop through a tunnel and answers 404 for anything else. How it fits
+together: `docs/HOW-IT-WORKS.md`, section 7.
+
+### Before going public (once per database)
+
+Every login that exists can be tried from the internet. Check them first:
+
+```bash
+source .env/prata.env
+.venv/bin/python -m fhir_server list-accounts
+```
+
+Databases seeded before 2026-11-19 have `doctor` and `patient` with the published passwords
+`doctor-pw` and `patient-pw`. Give each a new password, or disable it if you do not use it:
+
+```bash
+read -rs -p 'New doctor password: ' NEW_PW && export NEW_PW && echo
+.venv/bin/python -m fhir_server set-password --username doctor --from-env NEW_PW
+unset NEW_PW
+.venv/bin/python -m fhir_server disable-account --username patient
+```
+
+Use long passwords for every account: the login limit stops fast bursts, not slow guessing.
 
 ### Day to day
 

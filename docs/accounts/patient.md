@@ -15,8 +15,10 @@ It asks for the password twice and prints
 `created patient budi (Patient/P10000000001)`. If the Patient does not exist it prints
 `no Patient/...` and creates nothing.
 
-The seeded database already has one patient login, `patient` (password `patient-pw`
-unless `FHIR_PATIENT_PASSWORD` was set at seed time), linked to `Patient/P10000000001`.
+The seeded database already has one patient login, `patient`, linked to `Patient/P10000000001`. Its
+password is random, printed once in the JSON line `seed` ends with (`patient_password`).
+Databases seeded before 2026-11-19 used a published default instead: change it or disable
+the login before the site goes online (`docs/RUN-GUIDE.md`, *Before going public*).
 
 ## Log in
 

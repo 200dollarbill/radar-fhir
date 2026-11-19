@@ -45,3 +45,26 @@ def test_seed_requires_reset_flag_to_wipe(tmp_path):
     env = {"FHIR_DB_PATH": db, "FHIR_JWT_SECRET": "cli-secret-0123456789-0123456789abcdef"}
     p = run_cli(["seed"], env)  # without --reset the corrupt file must not be wiped
     assert p.returncode != 0 or "seed" in p.stdout
+
+
+def test_seed_makes_random_doctor_and_patient_passwords(tmp_path):
+    """The site is public: seeded logins must not have well-known passwords."""
+    from fastapi.testclient import TestClient
+    from fhir_server.app import create_app
+    from fhir_server.config import Settings
+    db = str(tmp_path / "seed.db")
+    secret = "cli-secret-0123456789-0123456789abcdef"
+    env = {"FHIR_DB_PATH": db, "FHIR_JWT_SECRET": secret, "FHIR_ADMIN_PASSWORD": "admin-pass-1"}
+    env_without = {k: v for k, v in os.environ.items()
+                   if k not in ("FHIR_DOCTOR_PASSWORD", "FHIR_PATIENT_PASSWORD")}
+    p = subprocess.run([sys.executable, "-m", "fhir_server", "seed", "--reset"],
+                       capture_output=True, text=True, env={**env_without, **env})
+    assert p.returncode == 0, p.stderr
+    summary = json.loads(p.stdout.strip().splitlines()[-1])
+    assert summary["doctor_password"] not in ("doctor-pw", "")
+    assert summary["patient_password"] not in ("patient-pw", "")
+    with TestClient(create_app(Settings(db_path=db, jwt_secret=secret))) as c:
+        def ok(u, pw):
+            return c.post("/auth/token", json={"username": u, "password": pw}).status_code == 200
+        assert not ok("doctor", "doctor-pw") and not ok("patient", "patient-pw")
+        assert ok("doctor", summary["doctor_password"]) and ok("patient", summary["patient_password"])

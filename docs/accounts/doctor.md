@@ -12,8 +12,10 @@ It asks for the password twice and prints
 **Practitioner** record (the FHIR record for a health worker), named as `--name` and with
 a synthetic NIK starting `9900`, and links the login to it.
 
-The seeded database already has one doctor login, `doctor` (password `doctor-pw` unless
-`FHIR_DOCTOR_PASSWORD` was set at seed time), linked to `Practitioner/N10000000`.
+The seeded database already has one doctor login, `doctor`, linked to `Practitioner/N10000000`. Its
+password is random, printed once in the JSON line `seed` ends with (`doctor_password`).
+Databases seeded before 2026-11-19 used a published default instead: change it or disable
+the login before the site goes online (`docs/RUN-GUIDE.md`, *Before going public*).
 
 ## Before the first login: give the doctor a patient
 
