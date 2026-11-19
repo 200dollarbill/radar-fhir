@@ -1,5 +1,5 @@
 // Scores the six display methods and applies the selection rule fixed in
-// docs/.superpowers/specs/2026-11-18-radar-display-processing-design.md.
+// docs/design/specs/2026-11-18-radar-display-processing-design.md.
 // Run from the repo root: node website/eval/run.mjs
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { METHODS, fitCircle } from "../src/dsp/demod.js";

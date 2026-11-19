@@ -13,4 +13,4 @@ def test_init_db_default_creates_data_folder(tmp_path, monkeypatch):
     p = run_cli(["init-db"], {"FHIR_JWT_SECRET": "x" * 32})
     assert p.returncode == 0, p.stderr
     assert "initialized data/fhir_server.db" in p.stdout
-    assert (tmp_path / "data" / "fhir_server.db").is_file()
+    assert (tmp_path / "data/fhir_server.db").is_file()

@@ -64,7 +64,7 @@ test("JSON array starting [ is ignored", () => {
 });
 
 test("FIELDS match radar_json.ino", () => {
-  const ino = readFileSync("arduino/radar_json/radar_json.ino", "utf8");
+  const ino = readFileSync("firmware/radar_json/radar_json.ino", "utf8");
   const keys = [...ino.matchAll(/\\"(\w+)\\":/g)].map((m) => m[1]);
   assert.deepEqual(keys, FIELDS);
 });

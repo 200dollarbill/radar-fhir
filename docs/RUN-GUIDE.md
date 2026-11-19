@@ -10,7 +10,7 @@ cd "/mnt/Data/yep/Kuliah/Tugas/Semester 7 ntr lagi lulus/PRATA"
 ## The picture
 
 ```
-K-LC7 radar ──wires──> AtomS3R (G7=I, G8=Q) ──USB──> Chrome: Capture page ──HTTP──> FHIR server ──> fhir_server.db
+K-LC7 radar ──wires──> AtomS3R (G7=I, G8=Q) ──USB──> Chrome: Capture page ──HTTP──> FHIR server ──> data/fhir_server.db
                         firmware, 100 Hz              (asks the board BOARD?)        127.0.0.1:8000   (SQLite file)
                         own ID + key                  Chrome: Sessions page ─────────┘
 ```
@@ -22,7 +22,7 @@ K-LC7 radar ──wires──> AtomS3R (G7=I, G8=Q) ──USB──> Chrome: Cap
 - The **Capture page** reads the board over USB, gets that board's open session from the
   server, plots the signal, and while you record posts 10 s chunks as `raw-capture`
   Observations.
-- The **server** checks every Observation and stores it in `fhir_server.db`.
+- The **server** checks every Observation and stores it in `data/fhir_server.db`.
 
 ## The website at a glance
 
@@ -41,8 +41,7 @@ The login is shared by all tabs and lasts one hour.
 ## One-time setup (skip if already done)
 
 ```bash
-python3 -m venv .venv
-.venv/bin/pip install -e .
+make setup
 ```
 
 ### Keep your secrets in one file
@@ -59,7 +58,8 @@ export FHIR_ADMIN_PASSWORD=pick-an-admin-password
 EOF
 ```
 
-Then, in **every new terminal** you use for the server: `source .env/prata.env`
+`make server` loads this file for you. For the commands you run by hand below (`seed`,
+`set-password`, `curl`), run `source .env/prata.env` first in that terminal.
 
 **`FHIR_ADMIN_PASSWORD` is read only when the database is seeded (Step 1).** Changing it
 later, or writing `prata.env` after seeding, does not change the stored password. To make
@@ -82,7 +82,7 @@ source .env/prata.env
 .venv/bin/python -m fhir_server seed --reset
 ```
 
-**`--reset` deletes `fhir_server.db` and starts fresh.** Run it only the first time, or when
+**`--reset` deletes `data/fhir_server.db` and starts fresh.** Run it only the first time, or when
 you really want to throw everything away. The last line it prints is a JSON summary with the
 passwords (admin, doctor, patient) and IDs. Copy it into `.env/notes.env` if you want to keep
 it. Adding tables later (as the session tables were) needs no reset: the server adds missing
@@ -91,8 +91,7 @@ tables when it starts.
 ### Step 2. Start the server (terminal 1, leave it running)
 
 ```bash
-source .env/prata.env
-.venv/bin/python -m fhir_server serve --port 8000
+make server
 ```
 
 Check it: open <http://127.0.0.1:8000/fhir-r4/v1/metadata>. You should see JSON.
@@ -106,9 +105,8 @@ did not answer `BOARD?`. Close anything holding the port first (Arduino Serial M
 Capture page).
 
 ```bash
-FQBN="m5stack:esp32:m5stack_atoms3r:USBMode=hwcdc,CDCOnBoot=cdc"
-arduino-cli compile --fqbn "$FQBN" arduino/radar_json
-arduino-cli upload -p /dev/ttyACM0 --fqbn "$FQBN" arduino/radar_json
+make flash              # compiles, then uploads to /dev/ttyACM0
+make flash PORT=/dev/ttyACM1   # if the board shows up on another port
 ```
 
 The board screen shows `Pra-TA radar`, `ONLINE` or `SENDING`, the sample counter,
@@ -227,16 +225,16 @@ like a real one. A red **SIMULATED** banner shows, and its chunks are marked `SI
 
 | What | Where | Notes |
 |---|---|---|
-| All server data | `fhir_server.db` in the repo root | SQLite, one file, gitignored. `seed --reset` deletes it. Point elsewhere with `--db <path>` before the subcommand or `FHIR_DB_PATH` |
-| Recordings | `fhir_server.db`, `Observation` rows | No separate CSV or WAV file is written |
-| Boards and sessions | `fhir_server.db`, tables `boards` and `board_sessions`; each board is also a `Device`, each session an `Encounter` | Only a hash of each board key is stored |
+| All server data | `data/fhir_server.db` | SQLite, one file, gitignored. `seed --reset` deletes it. Point elsewhere with `--db <path>` before the subcommand or `FHIR_DB_PATH` |
+| Recordings | `data/fhir_server.db`, `Observation` rows | No separate CSV or WAV file is written |
+| Boards and sessions | `data/fhir_server.db`, tables `boards` and `board_sessions`; each board is also a `Device`, each session an `Encounter` | Only a hash of each board key is stored |
 | Chunks not yet uploaded | Chrome's IndexedDB, database `prata-capture`, per page address | Kept if the server is down or the tab closes |
 | Login | Chrome `localStorage`, `prata-auth` | Shared by all tabs; gone after one hour or Log out |
 | Simulated board's ID and key | Chrome `localStorage`, `prata-virtual-board` | One per browser profile |
 | Real board's key | The board's flash (NVS, namespace `prata`) | Survives reflashing the sketch |
 | Secrets | `.env/prata.env` (you make it), `.env/notes.env` | Gitignored |
-| WiFi and token for the firmware | `arduino/radar_json/config.h` | Gitignored. Only for WiFi heart-rate posting, a placeholder 72 bpm, not a measurement |
-| Code | `fhir_server/` (server), `receiver/` (website, served at `/capture/`), `arduino/radar_json/` (firmware) | |
+| WiFi and token for the firmware | `firmware/radar_json/config.h` | Gitignored. Only for WiFi heart-rate posting, a placeholder 72 bpm, not a measurement |
+| Code | `fhir_server/` (server), `website/` (served at `/capture/`), `firmware/radar_json/` (firmware) | See the folder map in `README.md` |
 
 ## Pointing the radar
 
@@ -253,7 +251,7 @@ The board hands its key to anything that sends `BOARD?` over the USB port, so an
 on this PC with access to the port could copy it and upload as that board while it has an
 open session. The simulated board's key sits in the browser's `localStorage`. The planned
 fix is challenge and response, so the key never leaves the board: see
-`docs/.superpowers/specs/2026-11-18-board-sessions-and-navigation-design.md`.
+`docs/design/specs/2026-11-18-board-sessions-and-navigation-design.md`.
 
 ## Known quirks
 
@@ -274,7 +272,6 @@ fix is challenge and response, so the key never leaves the board: see
 ## Tests
 
 ```bash
-.venv/bin/python -m pytest tests -q          # server, plus firmware host tests
-node --test "receiver/tests/*.test.js"       # website
-node receiver/eval/run.mjs                   # rescore the display methods
+make test     # server (plus firmware host tests), website, scraper, view linter
+make eval     # rescore the display methods (rewrites docs/eval/)
 ```

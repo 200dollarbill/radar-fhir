@@ -1,6 +1,6 @@
 """Boards, test patients and capture sessions for the dashboard.
 
-Spec: docs/.superpowers/specs/2026-11-18-board-sessions-and-navigation-design.md.
+Spec: docs/design/specs/2026-11-18-board-sessions-and-navigation-design.md.
 FHIR writes go through FhirService, so the normal validation rules apply.
 """
 import re

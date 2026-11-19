@@ -45,8 +45,8 @@ do not reopen it.
   chunks to the server. Passed in real Chrome with the simulator and with real bytes
   from an AtomS3R (unwired pins, so pin noise, not radar signal), through a stand-in
   port. Chrome's own Web Serial port layer is not verified because the picker needs a
-  click. Run guide: `fhir_server/README.md`.
-- **Firmware (`arduino/radar_json/`) runs on the AtomS3R** at 100 Hz, timer-driven, and
+  click. Run guide: `docs/RUN-GUIDE.md`.
+- **Firmware (`firmware/radar_json/`) runs on the AtomS3R** at 100 Hz, timer-driven, and
   reads radar I/Q on **G7 (I) and G8 (Q)**. The pins were given by the owner; the I/Q
   order is assumed. Flashed and checked on 2026-11-16 (`READY ... i_pin=7 q_pin=8`).
   The owner reports the radar wired as of 2026-11-18; captures before that are pin noise.
@@ -82,7 +82,10 @@ hosted platform. Registration, API keys, Postman, DICOM and KYC are out of scope
 
 ## Repo map
 
+`README.md` is the human entry point (folder map, `make` commands, old-name table).
+
 ```
+README.md, Makefile             start here; `make` lists every command
 proposal_CLAUDE.md              thesis handoff
 docs/proposal_md/               proposal.md, citations, source and claim catalogue
 docs/proposal_guide/            how to write the proposal (style rules)
@@ -93,12 +96,14 @@ docs/reference/raw/             93 scraped pages + FETCH-LOG.md: evidence, never
 docs/reference/claude/          31 dense FHIR/SATUSEHAT files + INDEX.md: what YOU load
 docs/reference/human/           prose guides for the project owner
 docs/design/{specs,plans,reports} specs, implementation plans, build reports
-fhir_server/, tests/            server and its tests (run guide: fhir_server/README.md)
-device_client/, arduino/        Python device client, firmware (arduino/radar_json/)
-receiver/                       browser capture + review pages (plain JS), Node tests
-receiver/src/dsp/, eval/        display processing (demodulation, filters) and its evaluation
+docs/RUN-GUIDE.md               owner's walkthrough: server, board, website
+fhir_server/, tests/            server and its tests (internals: fhir_server/README.md)
+device_client/, firmware/       Python device client, board firmware (firmware/radar_json/)
+website/                        Sessions, Capture, Review pages (plain JS), Node tests
+website/src/dsp/, eval/         display processing (demodulation, filters) and its evaluation
 docs/eval/                      generated evaluation reports (do not hand-edit)
-tools/scrape/                  scraper, staleness check, view linter, 34 tests
+tools/scrape/                   scraper, staleness check, view linter, 34 tests
+data/                           sample CSVs and data/fhir_server.db (the real database, gitignored)
 ```
 
 **For FHIR or SATUSEHAT facts start at `docs/reference/claude/INDEX.md`.** Load the two
@@ -139,18 +144,20 @@ without running it.
 ## Commands
 
 ```bash
-.venv/bin/python -m pytest tests -q          # server tests
-node --test "receiver/tests/*.test.js"       # receiver tests
-node receiver/eval/run.mjs                   # rescore display methods, rewrites docs/eval/
-python3 -m pytest tools/scrape/tests -q     # 34 tests
-python3 tools/scrape/lint_views.py          # must print "0 problem(s)"
-python3 tools/scrape/check.py               # detect upstream doc drift (~3 min, network)
-
-# firmware (AtomS3R on /dev/ttyACM0)
-FQBN="m5stack:esp32:m5stack_atoms3r:USBMode=hwcdc,CDCOnBoot=cdc"
-arduino-cli compile --fqbn "$FQBN" arduino/radar_json
-arduino-cli upload -p /dev/ttyACM0 --fqbn "$FQBN" arduino/radar_json
+make setup       # .venv + pip install -e .
+make server      # loads .env/prata.env, serves http://127.0.0.1:8000 (website at /capture/)
+make test        # all of: .venv/bin/python -m pytest tests -q
+                 #         node --test "website/tests/*.test.js"
+                 #         python3 -m pytest tools/scrape/tests -q   (34 tests)
+                 #         python3 tools/scrape/lint_views.py        (must print "0 problem(s)")
+make eval        # node website/eval/run.mjs: rescore display methods, rewrites docs/eval/
+make firmware    # arduino-cli compile --fqbn "$FQBN" firmware/radar_json
+make flash       # compile, then arduino-cli upload -p /dev/ttyACM0 (override: PORT=...)
+                 # FQBN = m5stack:esp32:m5stack_atoms3r:USBMode=hwcdc,CDCOnBoot=cdc
+python3 tools/scrape/check.py   # detect upstream doc drift (~3 min, network)
 ```
+
+The real database is `data/fhir_server.db`. Never run `seed --reset` on it.
 
 ## Conventions
 
