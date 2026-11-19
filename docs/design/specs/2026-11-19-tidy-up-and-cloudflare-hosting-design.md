@@ -307,3 +307,30 @@ Workers Paid, Python on Workers, D1, Containers; Cloudflare Access; a custom dom
 request history and the WebSocket stream (2026-10-08 spec); board-key challenge and
 response; real patient data; boot services for the server or tunnel; CI; rewriting git
 history to purge `.env/notes.env` (the password change is the fix).
+
+## Live check results (2026-11-19)
+
+Deployed at `https://prata.haifa.workers.dev` (Worker `prata`, VPC service
+`01a1f23b-8b1f-7c90-9643-057de206fbe1`, tunnel `prata-laptop`). Checks 1 to 7 ran on a
+scratch database in the session scratchpad, then the real database was checked once.
+
+| # | Check | Result |
+|---|---|---|
+| 1 | Metadata through the Worker | Pass. `fhirVersion` 4.0.1 from the laptop; `/` gives 302 to `/capture/sessions.html` |
+| 2 | Rapid wrong logins get 429 | **Partial.** 51 wrong logins at about 1 per second (16 + 15 serial, 20 in parallel), one client IP, one location (SIN): 0 × 429. 100 logins at concurrency 10: 5 × 429. The binding works but, as Cloudflare documents, counts are local and approximate; it stops fast bursts, not slow guessing |
+| 3 | `/fhir-r4/v1/admin/accounts` | Pass. 403 with the exact copy, never forwarded |
+| 4 | Simulated board, headless Chrome | Pass. Logged in, created *Sesi L001*, registered `SIM-FAC5C78B`, opened session L1, recorded 25 s: 3 Observations, 3 distinct identifiers |
+| 5 | Offline, then back | Pass, both cases. Server stopped: the Worker answered 503 with the exact copy, the page read `Server unreachable, retrying.`, the outbox held 2 chunks; after restart it drained in 16.0 s. Tunnel stopped: same, drained in 17.1 s. Final count 13 Observations, 13 distinct identifiers (no duplicates) |
+| 6 | Content-policy messages on the three pages | Pass. 0. Other console errors were the expected network answers: 10 × 503 (offline test), 2 × 404 (favicon, no open session yet), 1 × 401 (board before registration) |
+| 7 | Worker CPU per request (`wrangler tail` `cpuTime`) | Pass. 204 requests: max 3 ms, mean 0.46 ms (limit 10 ms) |
+| — | Real database through the Worker | Pass. `make server` on `data/fhir_server.db` answered metadata 200 through the Worker; the file was unchanged |
+
+Found and fixed during the checks: Cloudflare's static assets serve `sessions.html` at
+`/capture/sessions` (307), so the top bar lost its current-tab mark; `nav.js` now ignores
+a trailing `.html` (commit `8bc52f3`).
+
+Open: **check 2.** A slow password guesser is not stopped by the Worker. Options for the
+owner: a per-username lockout in the server (strict, free, local), or a Durable Object
+limiter in the Worker. Neither is built; the owner decides.
+
+Owner check, not yet done: the real board over Web Serial on the hosted address.
