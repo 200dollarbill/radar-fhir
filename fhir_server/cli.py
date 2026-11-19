@@ -196,7 +196,7 @@ def main(argv=None):
     _ensure_secret()
     parser = argparse.ArgumentParser(prog="fhir_server")
     parser.add_argument("--db",
-                        default=os.environ.get("FHIR_DB_PATH", "fhir_server.db"))
+                        default=os.environ.get("FHIR_DB_PATH", "data/fhir_server.db"))
     sub = parser.add_subparsers(dest="cmd", required=True)
     sub.add_parser("init-db").set_defaults(fn=cmd_init_db)
     seed = sub.add_parser("seed")

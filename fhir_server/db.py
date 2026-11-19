@@ -1,4 +1,5 @@
 import sqlite3
+from pathlib import Path
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS resources (
@@ -33,6 +34,8 @@ def connect(db_path: str) -> sqlite3.Connection:
     # One shared connection for the app's single event loop; FastAPI serves
     # routes on a different thread than create_app ran on, so pinning to the
     # creating thread would raise ProgrammingError.
+    if db_path != ":memory:":
+        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db_path, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
