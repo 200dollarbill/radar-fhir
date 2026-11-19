@@ -5,7 +5,7 @@ import json
 import pathlib
 import re
 
-INGEST = pathlib.Path("arduino/radar_json/ingest.h")
+INGEST = pathlib.Path("firmware/radar_json/ingest.h")
 
 MACROS = {
     "PATIENT_REF": "Patient/P11111111111",

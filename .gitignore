@@ -4,7 +4,7 @@ __pycache__/
 .venv/
 .tools/
 PraTAVENV/
-arduino/radar_json/config.h
+firmware/radar_json/config.h
 tools/
 .env
 *.db

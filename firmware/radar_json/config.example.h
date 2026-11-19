@@ -1,4 +1,4 @@
-// arduino/radar_json/config.example.h  — copy to config.h and fill in.
+// firmware/radar_json/config.example.h  — copy to config.h and fill in.
 // config.h is gitignored: never commit real credentials.
 #pragma once
 #define WIFI_SSID     "your-wifi"

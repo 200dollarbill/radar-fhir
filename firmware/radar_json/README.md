@@ -21,14 +21,14 @@ The local tool reports Arduino CLI 1.5.1, ESP32 core 3.3.11, and M5Stack core 3.
 ```bash
 arduino-cli lib install M5Unified
 arduino-cli core install esp32:esp32
-arduino-cli compile --fqbn m5stack:esp32:m5stack_atoms3r arduino/radar_json
+arduino-cli compile --fqbn m5stack:esp32:m5stack_atoms3r firmware/radar_json
 ```
 
 List the connected port before any upload:
 
 ```bash
 arduino-cli board list
-arduino-cli upload -p <serial-port> --fqbn m5stack:esp32:m5stack_atoms3r arduino/radar_json
+arduino-cli upload -p <serial-port> --fqbn m5stack:esp32:m5stack_atoms3r firmware/radar_json
 ```
 
 The radar connects to G7 (I) and G8 (Q). With nothing attached the sketch only reads pin noise, which is not radar signal. The ADC reads 0 to about 3.1 V; keep the radar outputs inside that range.
@@ -39,7 +39,7 @@ The sketch can POST heart-rate Observations to the local FHIR server over WiFi,
 using the wire contract of `device_client/client.py` (same JSON, same endpoint,
 same `Authorization: Bearer` header).
 
-1. `cp arduino/radar_json/config.example.h arduino/radar_json/config.h` and fill
+1. `cp firmware/radar_json/config.example.h firmware/radar_json/config.h` and fill
    in WiFi credentials and `SERVER_URL` (the machine running `python3 -m fhir_server serve`).
 2. Obtain `DEVICE_TOKEN` from `python3 -m fhir_server seed` (its summary JSON) or
    `POST /fhir-r4/v1/Device/{id}/$provision` as an admin; `DEVICE_REF` and

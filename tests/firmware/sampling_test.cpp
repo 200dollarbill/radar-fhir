@@ -1,10 +1,10 @@
-// Host test for arduino/radar_json/sampling.h. Built and run by
+// Host test for firmware/radar_json/sampling.h. Built and run by
 // tests/test_firmware_sampling.py. Kept outside the sketch folder because
 // arduino-cli compiles every .cpp in the sketch.
 #include <cassert>
 #include <cstdint>
 #include <cstdio>
-#include "../../arduino/radar_json/sampling.h"
+#include "../../firmware/radar_json/sampling.h"
 
 static const uint32_t P = 10000;  // 10 ms
 

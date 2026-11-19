@@ -1,10 +1,10 @@
-// Host test for arduino/radar_json/board.h. Built and run by
+// Host test for firmware/radar_json/board.h. Built and run by
 // tests/test_firmware_board.py, which also parses the printed BOARD line as JSON.
 #include <cassert>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
-#include "../../arduino/radar_json/board.h"
+#include "../../firmware/radar_json/board.h"
 
 static bool feed(LineReader& r, const char* text) {
   bool done = false;
