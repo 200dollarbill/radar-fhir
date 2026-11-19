@@ -22,8 +22,8 @@ for the doctor. The integrated display is the decision support; the doctor decid
 
 **Next session: start with `docs/handover/2026-11-18-handover.md`.** Next task: proposal
 development (Chapter III, progress, presentation), spec
-`docs/.superpowers/specs/2026-11-18-proposal-development-design.md`, awaiting the owner's
-approval. Literature deepening (`docs/.superpowers/specs/2026-11-03-literature-deepening-design.md`;
+`docs/design/specs/2026-11-18-proposal-development-design.md`, awaiting the owner's
+approval. Literature deepening (`docs/design/specs/2026-11-03-literature-deepening-design.md`;
 results in `docs/papers/search/`) has produced L1 to L8. The website architecture is not designed yet and gets its own
 brainstorm after that.
 
@@ -38,9 +38,9 @@ do not reopen it.
   Proves admin-provision → doctor-opened Encounter → device heart-rate Observation →
   doctor read → patient own-record, with local JWT roles, device tokens,
   SATUSEHAT-shaped OperationOutcome validation and compile-gated firmware. Spec:
-  `docs/.superpowers/specs/2026-09-29-fhir-r4-server-walking-skeleton-design.md`.
+  `docs/design/specs/2026-09-29-fhir-r4-server-walking-skeleton-design.md`.
 - **Public exposure and request history:** spec written, not implemented
-  (`docs/.superpowers/specs/2026-10-08-public-exposure-request-history-design.md`).
+  (`docs/design/specs/2026-10-08-public-exposure-request-history-design.md`).
 - **Raw capture receiver: prototype.** A browser page at `/capture/` posts raw radar
   chunks to the server. Passed in real Chrome with the simulator and with real bytes
   from an AtomS3R (unwired pins, so pin noise, not radar signal), through a stand-in
@@ -59,7 +59,7 @@ do not reopen it.
   plane; `/capture/review.html` compares six methods on a saved CSV or Bundle. Chosen
   by a fixed rule on synthetic ground truth; the real RABITS capture only checks the
   guard. Display only, never a measurement. Spec:
-  `docs/.superpowers/specs/2026-11-18-radar-display-processing-design.md`; results:
+  `docs/design/specs/2026-11-18-radar-display-processing-design.md`; results:
   `docs/eval/2026-11-18-radar-display-processing.md`.
 - **Board sessions and site navigation (2026-11-18, implemented).** The board answers
   `BOARD?` with its chip ID and a key it made itself (sent in clear on request: known
@@ -67,12 +67,12 @@ do not reopen it.
   patients; admins or doctors open sessions on `/capture/sessions.html`; the capture page
   gets the plugged-in board's session (preview, then Record). All pages share a top bar.
   Flashed 2026-11-18: the AtomS3R answers `BOARD?` (ID `CCBA97030AD4`). Spec:
-  `docs/.superpowers/specs/2026-11-18-board-sessions-and-navigation-design.md`.
+  `docs/design/specs/2026-11-18-board-sessions-and-navigation-design.md`.
 - **Repo tidy-up and Cloudflare hosting (2026-11-19): spec written, not implemented.**
   Phase 1 renames folders by role (`website/`, `firmware/`, `hosting/`, `docs/design/`)
   and adds a top-level README and Makefile. Phase 2 serves the site from a free Cloudflare
   Worker that forwards API calls to this laptop through Workers VPC. Spec:
-  `docs/.superpowers/specs/2026-11-19-tidy-up-and-cloudflare-hosting-design.md`.
+  `docs/design/specs/2026-11-19-tidy-up-and-cloudflare-hosting-design.md`.
 - The old roadmap's device profile is no longer the headline goal. Add a profile only
   if the website design needs one.
 
@@ -92,13 +92,13 @@ docs/papers/                    papers by subject (PDF + md/); search/ = literat
 docs/reference/raw/             93 scraped pages + FETCH-LOG.md: evidence, never hand-edit
 docs/reference/claude/          31 dense FHIR/SATUSEHAT files + INDEX.md: what YOU load
 docs/reference/human/           prose guides for the project owner
-docs/.superpowers/{specs,plans} specs and implementation plans
+docs/design/{specs,plans,reports} specs, implementation plans, build reports
 fhir_server/, tests/            server and its tests (run guide: fhir_server/README.md)
 device_client/, arduino/        Python device client, firmware (arduino/radar_json/)
 receiver/                       browser capture + review pages (plain JS), Node tests
 receiver/src/dsp/, eval/        display processing (demodulation, filters) and its evaluation
 docs/eval/                      generated evaluation reports (do not hand-edit)
-.tools/scrape/                  scraper, staleness check, view linter, 34 tests
+tools/scrape/                  scraper, staleness check, view linter, 34 tests
 ```
 
 **For FHIR or SATUSEHAT facts start at `docs/reference/claude/INDEX.md`.** Load the two
@@ -124,7 +124,8 @@ that enforces a rule.
 
 ## How work is done here
 
-Any creative work starts with brainstorming, then spec → plan → implementation. Bugs
+Any creative work starts with brainstorming, then spec → plan → implementation.
+Specs go in `docs/design/specs/`, plans in `docs/design/plans/`. Bugs
 start with systematic debugging. Implementation is TDD. Never claim something works
 without running it.
 
@@ -141,9 +142,9 @@ without running it.
 .venv/bin/python -m pytest tests -q          # server tests
 node --test "receiver/tests/*.test.js"       # receiver tests
 node receiver/eval/run.mjs                   # rescore display methods, rewrites docs/eval/
-python3 -m pytest .tools/scrape/tests -q     # 34 tests
-python3 .tools/scrape/lint_views.py          # must print "0 problem(s)"
-python3 .tools/scrape/check.py               # detect upstream doc drift (~3 min, network)
+python3 -m pytest tools/scrape/tests -q     # 34 tests
+python3 tools/scrape/lint_views.py          # must print "0 problem(s)"
+python3 tools/scrape/check.py               # detect upstream doc drift (~3 min, network)
 
 # firmware (AtomS3R on /dev/ttyACM0)
 FQBN="m5stack:esp32:m5stack_atoms3r:USBMode=hwcdc,CDCOnBoot=cdc"

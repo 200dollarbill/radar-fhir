@@ -1,6 +1,6 @@
 # Thesis Handoff: CDSS for RME, RADAR JVP and 12-Lead ECG
 
-Read this before thesis work. **Since 2026-11-18 the system is a working prototype** (see `docs/handover/2026-11-18-handover.md` for methods, numbers and status); the next thesis task is Chapter III and the presentation update, spec `docs/.superpowers/specs/2026-11-18-proposal-development-design.md`. It records the current direction (as of 2026-11-03), scope, urgency argument, what is wrong or unverified in the draft, and open questions. Anything marked **TODO-verify** has not been confirmed. The draft itself is `docs/proposal_md/proposal.md`; if the two disagree on content, check the draft and update this file.
+Read this before thesis work. **Since 2026-11-18 the system is a working prototype** (see `docs/handover/2026-11-18-handover.md` for methods, numbers and status); the next thesis task is Chapter III and the presentation update, spec `docs/design/specs/2026-11-18-proposal-development-design.md`. It records the current direction (as of 2026-11-03), scope, urgency argument, what is wrong or unverified in the draft, and open questions. Anything marked **TODO-verify** has not been confirmed. The draft itself is `docs/proposal_md/proposal.md`; if the two disagree on content, check the draft and update this file.
 
 ---
 
@@ -13,7 +13,7 @@ The student is writing a final-year thesis (tugas akhir, **in Indonesian**) with
 
 **Final objective:** a working website that takes in RME, RADAR JVP and 12-lead ECG data and displays it visually and efficiently in one view for the doctor.
 
-**Next phase:** literature deepening to strengthen the justification and urgency, JVP signal link to cardiovascular health first. Spec: `docs/.superpowers/specs/2026-11-03-literature-deepening-design.md`. Results: `docs/papers/search/`.
+**Next phase:** literature deepening to strengthen the justification and urgency, JVP signal link to cardiovascular health first. Spec: `docs/design/specs/2026-11-03-literature-deepening-design.md`. Results: `docs/papers/search/`.
 
 ---
 

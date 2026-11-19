@@ -1,11 +1,13 @@
 .goutputstream-*
 __pycache__/
 *.pyc
+*.egg-info/
+.pytest_cache/
 .venv/
-.tools/
-PraTAVENV/
-firmware/radar_json/config.h
-tools/
 .env
 *.db
 apk/
+node_modules/
+.wrangler/
+hosting/public/
+firmware/radar_json/config.h

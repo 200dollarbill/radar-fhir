@@ -1,0 +1,318 @@
+# Review package: 3d3644e..0997823
+
+## Commits
+0997823 feat(receiver): parse serial lines and simulate the device
+
+## Files changed
+ receiver/package.json            |   1 +
+ receiver/src/jsonlines.js        |  68 ++++++++++++++++++++++++++
+ receiver/src/simulator.js        |  48 ++++++++++++++++++
+ receiver/tests/jsonlines.test.js | 103 +++++++++++++++++++++++++++++++++++++++
+ receiver/tests/simulator.test.js |  54 ++++++++++++++++++++
+ 5 files changed, 274 insertions(+)
+
+## Diff
+diff --git a/receiver/package.json b/receiver/package.json
+new file mode 100644
+index 0000000..f845285
+--- /dev/null
++++ b/receiver/package.json
+@@ -0,0 +1 @@
++{"private":true,"type":"module"}
+diff --git a/receiver/src/jsonlines.js b/receiver/src/jsonlines.js
+new file mode 100644
+index 0000000..163eac8
+--- /dev/null
++++ b/receiver/src/jsonlines.js
+@@ -0,0 +1,68 @@
++// Parse the newline-delimited JSON the radar_json firmware prints on serial.
++// Plain ES module: runs unchanged in the browser and in Node.
++
++export const FIELDS = [
++  "epoch_id", "sample_idx", "t_host_unix", "fs", "crc_ok", "missed",
++  "I", "Q", "ax", "ay", "az", "gx", "gy", "gz",
++];
++const INT_FIELDS = ["epoch_id", "sample_idx", "fs", "missed"];
++const NUM_FIELDS = ["t_host_unix", "I", "Q", "ax", "ay", "az", "gx", "gy", "gz"];
++
++const MAX_LINE = 4096;
++
++const rejected = (reason) => ({ kind: "rejected", reason });
++
++export function parseLine(line) {
++  const text = String(line).trim();
++  if (!text.startsWith("{")) return { kind: "ignored" };
++  let p;
++  try {
++    p = JSON.parse(text);
++  } catch {
++    return rejected("invalid JSON");
++  }
++  if (p === null || typeof p !== "object" || Array.isArray(p)) {
++    return rejected("packet must be a JSON object");
++  }
++  for (const f of FIELDS) {
++    if (!(f in p)) return rejected(`missing field ${f}`);
++  }
++  for (const f of INT_FIELDS) {
++    if (!Number.isInteger(p[f])) return rejected(`field ${f} must be an integer`);
++  }
++  if (typeof p.crc_ok !== "boolean") return rejected("field crc_ok must be boolean");
++  for (const f of NUM_FIELDS) {
++    if (typeof p[f] !== "number" || !Number.isFinite(p[f])) {
++      return rejected(`field ${f} must be a finite number`);
++    }
++  }
++  if (p.sample_idx < 0) return rejected("sample_idx must be >= 0");
++  if (p.fs <= 0) return rejected("fs must be > 0");
++  if (!p.crc_ok) return rejected("crc_ok is false");
++  return {
++    kind: "sample",
++    sample: {
++      sampleIdx: p.sample_idx, fs: p.fs, missed: p.missed,
++      I: p.I, Q: p.Q, ax: p.ax, ay: p.ay, az: p.az, gx: p.gx, gy: p.gy, gz: p.gz,
++    },
++  };
++}
++
++// Reassembles lines from arbitrary text chunks (serial reads split anywhere).
++export class LineSplitter {
++  constructor() {
++    this.buf = "";
++  }
++
++  push(text) {
++    this.buf += text;
++    const parts = this.buf.split("\n");
++    this.buf = parts.pop();
++    const out = parts.map((l) => (l.endsWith("\r") ? l.slice(0, -1) : l));
++    if (this.buf.length > MAX_LINE) {
++      out.push(this.buf);
++      this.buf = "";
++    }
++    return out;
++  }
++}
+diff --git a/receiver/src/simulator.js b/receiver/src/simulator.js
+new file mode 100644
+index 0000000..0b5b765
+--- /dev/null
++++ b/receiver/src/simulator.js
+@@ -0,0 +1,48 @@
++// Simulated device: yields the same lines the firmware prints.
++import { FIELDS } from "./jsonlines.js";
++
++export function formatLine(sampleIdx, fs, values) {
++  const v = { missed: 0, I: 1.65, Q: 1.65, ax: 0, ay: 0, az: 1, gx: 0, gy: 0, gz: 0, ...values };
++  const f6 = (x) => Number(x).toFixed(6);
++  const rec = {
++    epoch_id: 0, sample_idx: sampleIdx, t_host_unix: "0.000", fs, crc_ok: "true", missed: v.missed,
++    I: f6(v.I), Q: f6(v.Q), ax: f6(v.ax), ay: f6(v.ay), az: f6(v.az),
++    gx: f6(v.gx), gy: f6(v.gy), gz: f6(v.gz),
++  };
++  return "{" + FIELDS.map((k) => `"${k}":${rec[k]}`).join(",") + "}";
++}
++
++function defaultSleep(ms, signal) {
++  return new Promise((resolve) => {
++    const done = () => { clearTimeout(timer); signal?.removeEventListener("abort", done); resolve(); };
++    const timer = setTimeout(done, ms);
++    signal?.addEventListener("abort", done, { once: true });
++  });
++}
++
++// Respiration sine + pulse + small noise, as phase of the I/Q vector.
++function phaseAt(t) {
++  const resp = 0.8 * Math.sin(2 * Math.PI * 0.25 * t);
++  const pulse = 0.15 * Math.sin(2 * Math.PI * 1.2 * t);
++  const noise = (Math.random() - 0.5) * 0.02;
++  return resp + pulse + noise;
++}
++
++export async function* simulatorLines({ fs = 100, now = Date.now, sleep, signal } = {}) {
++  const wait = sleep ?? ((ms) => defaultSleep(ms, signal));
++  const start = now();
++  let emitted = 0;
++  while (!signal?.aborted) {
++    const due = Math.floor(((now() - start) / 1000) * fs) - emitted;
++    for (let n = 0; n < due; n++) {
++      if (signal?.aborted) return;
++      const phase = phaseAt(emitted / fs);
++      yield formatLine(emitted, fs, {
++        I: 1.65 + 0.4 * Math.cos(phase + 0.6),
++        Q: 1.65 + 0.4 * Math.sin(phase + 0.6),
++      });
++      emitted++;
++    }
++    await wait(20);
++  }
++}
+diff --git a/receiver/tests/jsonlines.test.js b/receiver/tests/jsonlines.test.js
+new file mode 100644
+index 0000000..6897309
+--- /dev/null
++++ b/receiver/tests/jsonlines.test.js
+@@ -0,0 +1,103 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import { readFileSync } from "node:fs";
++import { parseLine, LineSplitter, FIELDS } from "../src/jsonlines.js";
++
++const good = {
++  epoch_id: 1, sample_idx: 5, t_host_unix: 1.5, fs: 100, crc_ok: true, missed: 0,
++  I: 1.65, Q: 1.7, ax: 0, ay: 0, az: 1, gx: 0, gy: 0, gz: 0,
++};
++const line = (o) => JSON.stringify(o);
++const without = (k) => { const o = { ...good }; delete o[k]; return o; };
++
++test("valid firmware line gives a sample", () => {
++  const r = parseLine(line(good));
++  assert.equal(r.kind, "sample");
++  assert.deepEqual(r.sample, {
++    sampleIdx: 5, fs: 100, missed: 0, I: 1.65, Q: 1.7,
++    ax: 0, ay: 0, az: 1, gx: 0, gy: 0, gz: 0,
++  });
++});
++
++test("READY banner and ingest text are ignored, not rejected", () => {
++  assert.equal(parseLine("READY radar_json i_pin=1 q_pin=2 fs=100 imu_ok=true").kind, "ignored");
++  assert.equal(parseLine("ingest POST -> 200").kind, "ignored");
++});
++
++test("blank line is ignored", () => {
++  assert.equal(parseLine("").kind, "ignored");
++  assert.equal(parseLine("  \r").kind, "ignored");
++});
++
++test("broken {json is rejected", () => {
++  assert.equal(parseLine('{"epoch_id":1,').kind, "rejected");
++});
++
++test("missing field is rejected, naming it", () => {
++  const r = parseLine(line(without("gz")));
++  assert.equal(r.kind, "rejected");
++  assert.match(r.reason, /gz/);
++});
++
++test("non-integer sample_idx or fs is rejected", () => {
++  assert.equal(parseLine(line({ ...good, sample_idx: 1.5 })).kind, "rejected");
++  assert.equal(parseLine(line({ ...good, fs: "100" })).kind, "rejected");
++});
++
++test("negative sample_idx and fs of 0 are rejected", () => {
++  assert.equal(parseLine(line({ ...good, sample_idx: -1 })).kind, "rejected");
++  assert.equal(parseLine(line({ ...good, fs: 0 })).kind, "rejected");
++});
++
++test("string I value is rejected", () => {
++  assert.equal(parseLine(line({ ...good, I: "1.65" })).kind, "rejected");
++});
++
++test("crc_ok:false is rejected with reason crc_ok", () => {
++  const r = parseLine(line({ ...good, crc_ok: false }));
++  assert.equal(r.kind, "rejected");
++  assert.match(r.reason, /crc_ok/);
++});
++
++test("JSON array starting [ is ignored", () => {
++  assert.equal(parseLine("[1,2,3]").kind, "ignored");
++});
++
++test("FIELDS match radar_json.ino", () => {
++  const ino = readFileSync("arduino/radar_json/radar_json.ino", "utf8");
++  const keys = [...ino.matchAll(/\\"(\w+)\\":/g)].map((m) => m[1]);
++  assert.deepEqual(keys, FIELDS);
++});
++
++test("a line split across pushes comes out once, whole", () => {
++  const s = new LineSplitter();
++  assert.deepEqual(s.push('{"a":'), []);
++  assert.deepEqual(s.push("1}\n"), ['{"a":1}']);
++});
++
++test("two lines in one push come out in order", () => {
++  assert.deepEqual(new LineSplitter().push("a\nb\n"), ["a", "b"]);
++});
++
++test("CRLF is stripped", () => {
++  assert.deepEqual(new LineSplitter().push("a\r\nb\r\n"), ["a", "b"]);
++});
++
++test("a partial line stays buffered", () => {
++  const s = new LineSplitter();
++  assert.deepEqual(s.push("a\npar"), ["a"]);
++  assert.deepEqual(s.push("t\n"), ["part"]);
++});
++
++test("a mid-line start parses as ignored", () => {
++  const [l] = new LineSplitter().push('":1.2,"Q":3}\n');
++  assert.equal(parseLine(l).kind, "ignored");
++});
++
++test("over 4096 chars without newline is emitted and the buffer resets", () => {
++  const s = new LineSplitter();
++  const out = s.push("x".repeat(4097));
++  assert.equal(out.length, 1);
++  assert.equal(out[0].length, 4097);
++  assert.deepEqual(s.push("y\n"), ["y"]);
++});
+diff --git a/receiver/tests/simulator.test.js b/receiver/tests/simulator.test.js
+new file mode 100644
+index 0000000..f3f22b2
+--- /dev/null
++++ b/receiver/tests/simulator.test.js
+@@ -0,0 +1,54 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import { parseLine } from "../src/jsonlines.js";
++import { simulatorLines } from "../src/simulator.js";
++
++// Fake clock: sleep advances time by `step` ms; stops after `ticks` sleeps.
++async function collect({ fs = 100, step = 1000, ticks = 1 } = {}) {
++  let t = 1_000_000;
++  let n = 0;
++  const ac = new AbortController();
++  const sleep = async () => { t += step; if (++n >= ticks) ac.abort(); };
++  const lines = [];
++  for await (const l of simulatorLines({ fs, now: () => t, sleep, signal: ac.signal })) lines.push(l);
++  return lines;
++}
++
++test("each line parses to a sample with consecutive sampleIdx", async () => {
++  const lines = await collect({ ticks: 3 });
++  assert.ok(lines.length > 0);
++  lines.forEach((l, i) => {
++    const r = parseLine(l);
++    assert.equal(r.kind, "sample");
++    assert.equal(r.sample.sampleIdx, i);
++    assert.equal(r.sample.fs, 100);
++  });
++});
++
++test("I and Q stay inside 0 to 3.3 V", async () => {
++  for (const l of await collect({ ticks: 10 })) {
++    const { I, Q } = parseLine(l).sample;
++    assert.ok(I >= 0 && I <= 3.3 && Q >= 0 && Q <= 3.3);
++  }
++});
++
++test("emits elapsed×fs lines after a long sleep, catching up", async () => {
++  const lines = await collect({ fs: 100, step: 2500, ticks: 2 });
++  assert.equal(lines.length, 250);
++});
++
++test("an aborted signal ends the generator", async () => {
++  const ac = new AbortController();
++  ac.abort();
++  const lines = [];
++  for await (const l of simulatorLines({ signal: ac.signal, sleep: async () => {} })) lines.push(l);
++  assert.deepEqual(lines, []);
++});
++
++test("abort during the default sleep ends the generator promptly", async () => {
++  const ac = new AbortController();
++  const gen = simulatorLines({ signal: ac.signal });
++  const p = (async () => { for await (const _ of gen) { /* drain */ } })();
++  setTimeout(() => ac.abort(), 50);
++  await p;
++});

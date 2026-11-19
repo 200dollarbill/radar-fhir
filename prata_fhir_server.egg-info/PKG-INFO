@@ -1,9 +1,0 @@
-Metadata-Version: 2.4
-Name: prata-fhir-server
-Version: 0.1.0
-Summary: Local SATUSEHAT-compatible FHIR R4 server (walking skeleton)
-Requires-Python: >=3.12
-Requires-Dist: fastapi
-Requires-Dist: fhir.resources
-Requires-Dist: PyJWT
-Requires-Dist: uvicorn

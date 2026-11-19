@@ -1,0 +1,281 @@
+# Review package: 45bc75d..3d3644e
+
+## Commits
+3d3644e feat(server): capture-session command prints a session card
+
+## Files changed
+ fhir_server/cli.py                |  97 +++++++++++++++++++++++++++++++++
+ tests/test_cli_capture_session.py | 109 ++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 206 insertions(+)
+
+## Diff
+diff --git a/fhir_server/cli.py b/fhir_server/cli.py
+index 40612e4..bd2fe11 100644
+--- a/fhir_server/cli.py
++++ b/fhir_server/cli.py
+@@ -1,13 +1,14 @@
+ import argparse
+ import json
+ import os
++import re
+ import secrets
+ import sys
+ 
+ 
+ def _load_dotenv():
+     # isfile, not exists: the repo has a directory named .env/ (notes.env)
+     if os.path.isfile(".env"):
+         with open(".env") as f:
+             for line in f:
+                 line = line.strip()
+@@ -116,39 +117,135 @@ def cmd_seed(args):
+     print(json.dumps({
+         "admin_password": admin_password,
+         "doctor_password": doctor_password,
+         "patient_password": patient_password,
+         "device_token": device_token,
+         "org_id": org_id, "location_id": loc_id,
+         "practitioner_id": doc_id, "patient_id": pat_id, "device_id": dev_id,
+     }))
+ 
+ 
++def cmd_capture_session(args):
++    from datetime import datetime, timezone
++
++    from . import db as db_mod
++    from .auth.jwt import Principal
++    from .config import Settings
++    from .repositories import resources
++    from .services.fhir_service import FhirError, FhirService
++
++    label = args.label
++    if not re.fullmatch(r"[A-Za-z0-9-]{1,32}", label):
++        print("invalid label: use 1-32 letters, digits or hyphens",
++              file=sys.stderr)
++        sys.exit(2)
++    conn = db_mod.connect(args.db)
++    db_mod.init(conn)
++    first = {t: (resources.list(conn, t) or [None])[0]
++             for t in ("Organization", "Location", "Practitioner", "Device")}
++    if not all(first.values()):
++        print('database not seeded: run "seed" first', file=sys.stderr)
++        sys.exit(1)
++    org, loc, prac, dev = (first[t] for t in
++                           ("Organization", "Location", "Practitioner",
++                            "Device"))
++    svc = FhirService(conn, Settings.from_env(db_path=args.db))
++    admin = Principal(kind="admin")
++
++    patient = None
++    for _ in range(10):
++        nik = "9900" + "".join(secrets.choice("0123456789") for _ in range(12))
++        try:
++            _, patient, _ = svc.create(admin, "Patient", {
++                "resourceType": "Patient",
++                "identifier": [{"use": "official",
++                                "system": "https://fhir.kemkes.go.id/id/nik",
++                                "value": nik}],
++                "name": [{"use": "official", "text": f"Sesi {label}"}],
++                "gender": "male", "birthDate": "1990-01-01",
++                "multipleBirthBoolean": False,
++                "address": [{
++                    "use": "home", "line": ["Sesi capture"],
++                    "city": "Jakarta Pusat", "postalCode": "10110",
++                    "country": "ID",
++                    "extension": [{
++                        "url": "https://fhir.kemkes.go.id/r4/StructureDefinition/"
++                               "administrativeCode",
++                        "extension": [
++                            {"url": "province", "valueCode": "31"},
++                            {"url": "city", "valueCode": "3171"},
++                            {"url": "district", "valueCode": "317101"},
++                            {"url": "village", "valueCode": "317101001"},
++                            {"url": "rt", "valueCode": "001"},
++                            {"url": "rw", "valueCode": "001"}]}]}]})
++            break
++        except FhirError as exc:
++            if exc.status != 409:
++                raise
++    if patient is None:
++        print("could not allocate a unique synthetic NIK", file=sys.stderr)
++        sys.exit(1)
++
++    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
++    org_id = org["id"]
++    enc_doc = {
++        "resourceType": "Encounter",
++        "identifier": [{"use": "official",
++                        "system": f"http://sys-ids.kemkes.go.id/encounter/{org_id}",
++                        "value": f"capture-{label}-{secrets.token_hex(4)}"}],
++        "status": "arrived",
++        "statusHistory": [{"status": "arrived", "period": {"start": now}}],
++        "class": {"system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
++                  "code": "AMB", "display": "ambulatory"},
++        "subject": {"reference": f"Patient/{patient['id']}"},
++        "participant": [{"individual": {
++            "reference": f"Practitioner/{prac['id']}"}}],
++        "period": {"start": now},
++        "location": [{"location": {"reference": f"Location/{loc['id']}"}}],
++        "serviceProvider": {"reference": f"Organization/{org_id}"},
++    }
++    enc_id, enc, _ = svc.create(admin, "Encounter", enc_doc)
++    enc = dict(enc)
++    enc["status"] = "in-progress"
++    enc["statusHistory"] = list(enc["statusHistory"]) + [
++        {"status": "in-progress", "period": {"start": now}}]
++    svc.update(admin, "Encounter", enc_id, enc)
++
++    token = svc.provision_device(admin, dev["id"], f"Patient/{patient['id']}")
++    print(json.dumps({
++        "token": token, "patient": f"Patient/{patient['id']}",
++        "encounter": f"Encounter/{enc_id}", "device": f"Device/{dev['id']}",
++        "org": org_id, "label": label}))
++
++
+ def cmd_serve(args):
+     import uvicorn
+ 
+     from .app import create_app
+     from .config import Settings
+     uvicorn.run(create_app(Settings.from_env(db_path=args.db)),
+                 host="127.0.0.1", port=args.port)
+ 
+ 
+ def main(argv=None):
+     _load_dotenv()
+     _ensure_secret()
+     parser = argparse.ArgumentParser(prog="fhir_server")
+     parser.add_argument("--db",
+                         default=os.environ.get("FHIR_DB_PATH", "fhir_server.db"))
+     sub = parser.add_subparsers(dest="cmd", required=True)
+     sub.add_parser("init-db").set_defaults(fn=cmd_init_db)
+     seed = sub.add_parser("seed")
+     seed.add_argument("--reset", action="store_true")
+     seed.set_defaults(fn=cmd_seed)
++    cap = sub.add_parser("capture-session")
++    cap.add_argument("--label", required=True)
++    cap.set_defaults(fn=cmd_capture_session)
+     serve = sub.add_parser("serve")
+     serve.add_argument("--port", type=int, default=8000)
+     serve.set_defaults(fn=cmd_serve)
+     args = parser.parse_args(argv)
+     args.fn(args)
+ 
+ 
+ if __name__ == "__main__":
+     main()
+diff --git a/tests/test_cli_capture_session.py b/tests/test_cli_capture_session.py
+new file mode 100644
+index 0000000..9ad5daa
+--- /dev/null
++++ b/tests/test_cli_capture_session.py
+@@ -0,0 +1,109 @@
++import json
++import os
++import re
++
++import pytest
++from fastapi.testclient import TestClient
++
++from fhir_server.app import create_app
++from fhir_server.config import Settings
++from fhir_server.repositories import resources
++from test_cli_seed import run_cli
++from test_rules_observation import raw
++
++SECRET = "cap-secret-0123456789-0123456789abcdef"
++
++
++@pytest.fixture
++def seeded(tmp_path):
++    db = str(tmp_path / "cap.db")
++    env = {"FHIR_DB_PATH": db, "FHIR_JWT_SECRET": SECRET,
++           "FHIR_ADMIN_PASSWORD": "admin-pass-1"}
++    p = run_cli(["seed", "--reset"], env)
++    assert p.returncode == 0, p.stderr
++    return {"db": db, "env": env, "seed": json.loads(p.stdout.splitlines()[-1])}
++
++
++def card_of(seeded, label="S001"):
++    p = run_cli(["capture-session", "--label", label], seeded["env"])
++    assert p.returncode == 0, p.stderr
++    return json.loads(p.stdout.strip().splitlines()[-1])
++
++
++def count(seeded, type_):
++    from fhir_server import db as db_mod
++    return len(resources.list(db_mod.connect(seeded["db"]), type_))
++
++
++def test_card_has_all_fields_and_references(seeded):
++    card = card_of(seeded)
++    assert set(card) == {"token", "patient", "encounter", "device", "org",
++                         "label"}
++    assert card["label"] == "S001"
++    assert card["token"]
++    assert re.fullmatch(r"Patient/\S+", card["patient"])
++    assert re.fullmatch(r"Encounter/\S+", card["encounter"])
++    assert card["device"] == f"Device/{seeded['seed']['device_id']}"
++    assert card["org"] == seeded["seed"]["org_id"]
++
++
++def test_card_can_post_a_raw_chunk(seeded):
++    card = card_of(seeded)
++    app = create_app(Settings(db_path=seeded["db"], jwt_secret=SECRET))
++    body = raw(subject={"reference": card["patient"]},
++               encounter={"reference": card["encounter"]},
++               device={"reference": card["device"]},
++               identifier=[{"system": "http://sys-ids.kemkes.go.id/observation/"
++                                      + card["org"], "value": "cap-1-0"}])
++    with TestClient(app) as c:
++        r = c.post("/fhir-r4/v1/Observation", json=body,
++                   headers={"Authorization": f"Bearer {card['token']}"})
++        assert r.status_code == 201, r.text
++
++
++def test_doctor_can_read_the_chunk(seeded):
++    card = card_of(seeded)
++    app = create_app(Settings(db_path=seeded["db"], jwt_secret=SECRET))
++    body = raw(subject={"reference": card["patient"]},
++               encounter={"reference": card["encounter"]},
++               device={"reference": card["device"]},
++               identifier=[{"system": "http://sys-ids.kemkes.go.id/observation/"
++                                      + card["org"], "value": "cap-1-0"}])
++    with TestClient(app) as c:
++        r = c.post("/fhir-r4/v1/Observation", json=body,
++                   headers={"Authorization": f"Bearer {card['token']}"})
++        assert r.status_code == 201, r.text
++        oid = r.json()["id"]
++        t = c.post("/auth/token", json={"username": "doctor",
++                                        "password": "doctor-pw"})
++        got = c.get(f"/fhir-r4/v1/Observation/{oid}", headers={
++            "Authorization": f"Bearer {t.json()['access_token']}"})
++        assert got.status_code == 200, got.text
++
++
++def test_two_sessions_get_different_patients(seeded):
++    a = card_of(seeded, "A")
++    b = card_of(seeded, "B")
++    assert a["patient"] != b["patient"]
++    assert a["encounter"] != b["encounter"]
++
++
++def test_same_label_twice_succeeds(seeded):
++    a = card_of(seeded, "S001")
++    b = card_of(seeded, "S001")
++    assert a["encounter"] != b["encounter"]
++
++
++def test_unseeded_db_exits_1_with_message(tmp_path):
++    env = {"FHIR_DB_PATH": str(tmp_path / "empty.db"),
++           "FHIR_JWT_SECRET": SECRET}
++    p = run_cli(["capture-session", "--label", "S001"], env)
++    assert p.returncode == 1 and "seed" in p.stderr
++
++
++@pytest.mark.parametrize("label", ["a b", "", "x" * 33])
++def test_bad_label_rejected(seeded, label):
++    before = (count(seeded, "Patient"), count(seeded, "Encounter"))
++    p = run_cli(["capture-session", "--label", label], seeded["env"])
++    assert p.returncode != 0
++    assert before == (count(seeded, "Patient"), count(seeded, "Encounter"))
