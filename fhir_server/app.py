@@ -12,7 +12,7 @@ from .routes import fhir as fhir_routes
 from .routes import sessions as session_routes
 from .services.fhir_service import SUPPORTED_PARAMS
 
-RECEIVER_DIR = Path(__file__).resolve().parent.parent / "receiver"
+WEBSITE_DIR = Path(__file__).resolve().parent.parent / "website"
 
 
 class RevalidatedStaticFiles(StaticFiles):
@@ -21,7 +21,7 @@ class RevalidatedStaticFiles(StaticFiles):
     Without Cache-Control, Chrome guesses a freshness time and may run an old
     cached module next to a new one; a missing export then stops the whole page.
     Files cached that way before this header existed are repaired in the browser
-    by receiver/guard.js (Chrome ignores Clear-Site-Data on http://127.0.0.1)."""
+    by website/guard.js (Chrome ignores Clear-Site-Data on http://127.0.0.1)."""
 
     async def get_response(self, path, scope):
         response = await super().get_response(path, scope)
@@ -89,6 +89,6 @@ def create_app(settings: Settings) -> FastAPI:
                             media_type="application/fhir+json")
 
     app.include_router(fhir_routes.router)
-    app.mount("/capture", RevalidatedStaticFiles(directory=RECEIVER_DIR, html=True),
+    app.mount("/capture", RevalidatedStaticFiles(directory=WEBSITE_DIR, html=True),
               name="capture")
     return app

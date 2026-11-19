@@ -9,7 +9,7 @@ from fhir_server.app import create_app
 from fhir_server.config import Settings
 from test_cli_capture_session import SECRET, card_of, seeded  # noqa: F401
 
-FIXTURE = Path(__file__).resolve().parent.parent / "receiver/tests/fixtures/make_chunk.mjs"
+FIXTURE = Path(__file__).resolve().parent.parent / "website/tests/fixtures/make_chunk.mjs"
 CODE_TO_CHANNEL = {"i-voltage": "I", "q-voltage": "Q", "accel-x": "ax",
                    "accel-y": "ay", "accel-z": "az", "gyro-x": "gx",
                    "gyro-y": "gy", "gyro-z": "gz"}

@@ -4,7 +4,7 @@ import { butterBandpass, filtfilt, detrend, fillGaps } from "./filters.js";
 
 export const BANDS = { wide: [0.5, 10], narrow: [0.7, 3], breathing: [0.1, 0.5] };
 
-// Chosen by receiver/eval/run.mjs under the selection rule in the design spec.
+// Chosen by website/eval/run.mjs under the selection rule in the design spec.
 export const DEFAULT_METHOD = "hybrid";
 
 const MIN_SECONDS = 2;
