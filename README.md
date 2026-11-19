@@ -33,6 +33,22 @@ You need Python 3.12+, Node 22 and `make`. From the repo root:
 The first time, the database has to be created: see Step 1 of `docs/RUN-GUIDE.md`. That
 guide also covers flashing the board, recording and troubleshooting.
 
+## Hosted site
+
+The same website is online at <https://prata.haifa.workers.dev>. Anyone can open it, but
+only accounts you create can log in (`docs/accounts/`). The data stays in this laptop's
+database: the site is a Cloudflare Worker that passes every request to the laptop.
+
+It works only while the laptop runs both, each in its own terminal:
+
+```bash
+make server     # terminal 1
+make tunnel     # terminal 2: connects the laptop to Cloudflare
+```
+
+After changing pages in `website/` or the Worker in `hosting/`, publish them with
+`make deploy`. Server changes need no deploy, only a restart of `make server`.
+
 ## Folder map
 
 ```
@@ -49,6 +65,8 @@ PRATA/
 ├── data/            sample recordings (CSV) and the local databases (*.db, never committed)
 ├── docs/
 │   ├── RUN-GUIDE.md full walkthrough: server, board, website
+│   ├── HOW-IT-WORKS.md how the parts fit together
+│   ├── accounts/    setting up admin, doctor and patient logins
 │   ├── design/      specs/, plans/, reports/: how each part was designed and built
 │   ├── reference/   FHIR and SATUSEHAT reference (raw pages, condensed notes, guides)
 │   ├── eval/        generated evaluation reports (do not edit by hand)
@@ -94,6 +112,8 @@ Older specs, plans and handovers use the names from before 2026-11-19:
 
 ## Read next
 
+- `docs/HOW-IT-WORKS.md`: how the whole program fits together, from radar to database.
+- `docs/accounts/README.md`: creating admin, doctor and patient accounts.
 - `docs/RUN-GUIDE.md`: the full walkthrough.
 - `docs/design/specs/`: why each part works the way it does.
 - `CLAUDE.md`: project brief and conventions.

@@ -1,6 +1,7 @@
 # Run guide: server, board and website
 
-Everything here runs on your laptop. Nothing talks to the real SATUSEHAT.
+The server and all data live on your laptop. The hosted site (section *Hosted site*) only
+passes requests through to it. Nothing talks to the real SATUSEHAT.
 Commands assume you are in the repo root:
 
 ```bash
@@ -205,6 +206,48 @@ On Capture, **Use simulated board** behaves like a real board: it has an ID `SIM
 and a key kept in this browser, answers `BOARD?`, and must be registered and given a session
 like a real one. A red **SIMULATED** banner shows, and its chunks are marked `SIMULATED`.
 
+## Accounts
+
+Create, list and disable logins with the laptop commands in `docs/accounts/README.md`.
+Each role has its own guide there (admin, doctor, patient).
+
+## Hosted site (https://prata.haifa.workers.dev)
+
+The website is also online. Anyone can open it; only your accounts can log in. Data stays
+in `data/fhir_server.db` on this laptop: the Cloudflare Worker passes every request to the
+laptop through a tunnel. How it fits together: `docs/HOW-IT-WORKS.md`, section 7.
+
+### Day to day
+
+```bash
+make server     # terminal 1
+make tunnel     # terminal 2: the site is online only while both run
+```
+
+After changing anything in `website/` or `hosting/`, run `make deploy`. It rebuilds the
+pages and publishes them (about 15 seconds). Server changes only need a restart of
+`make server`.
+
+### One-time setup (done on 2026-11-19; repeat only on a new laptop)
+
+1. `make setup` installs Wrangler (Cloudflare's command-line tool) into `hosting/`.
+2. Install `cloudflared` without sudo:
+   ```bash
+   curl -fsSL -o ~/.local/bin/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+   chmod +x ~/.local/bin/cloudflared
+   ```
+3. Log Wrangler in (opens the browser): type `! (cd hosting && npx wrangler login)` in
+   Claude Code, or run it in a terminal.
+4. The tunnel `prata-laptop` (ID `595af04e-6869-424e-aee0-bc138bb101d2`) and the Workers
+   VPC service `prata-laptop` (ID in `hosting/wrangler.jsonc`) already exist in the
+   Cloudflare account. A new laptop only needs the tunnel's token in `.env/prata.env`:
+   ```bash
+   export CLOUDFLARE_TUNNEL_TOKEN=<token>
+   ```
+   The token is shown with the tunnel `prata-laptop` in the Cloudflare dashboard. It is a
+   secret: never paste it into a chat, a commit or a document.
+5. `make deploy`.
+
 ## Troubleshooting
 
 | You see | Why | Do |
@@ -220,6 +263,10 @@ like a real one. A red **SIMULATED** banner shows, and its chunks are marked `SI
 | *Updating outdated files in the browser cache, then reloading…* | The browser had an old copy of a page file next to new ones | Nothing: the page re-downloads its files and reloads itself |
 | *This page failed to load (…)* | The automatic repair did not help (tried twice) | Reload with **Ctrl+Shift+R**. If that does not help, restart the server |
 | Connect board shows *No port selected* | The port picker was closed without choosing | Click Connect board again and pick the AtomS3R port |
+| *PRATA server is offline (laptop off or tunnel down)* (hosted site) | The laptop is off, or `make server` or `make tunnel` is not running | Start both. Chunks recorded meanwhile wait in the browser and upload by themselves |
+| *Login failed: Too many login attempts. Try again in a minute.* | Many logins from one address in a short time (hosted site) | Wait a minute, then log in with the right password |
+| 403 *Account management is only available on the PRATA laptop.* | The account API was called through the hosted site | Use the account commands on the laptop (`docs/accounts/README.md`) |
+| `make tunnel` says *CLOUDFLARE_TUNNEL_TOKEN is not set*, or the tunnel never connects | The token is missing or wrong in `.env/prata.env` | Copy the token again (Hosted site, step 4), then `make tunnel` |
 
 ## Where things are saved
 

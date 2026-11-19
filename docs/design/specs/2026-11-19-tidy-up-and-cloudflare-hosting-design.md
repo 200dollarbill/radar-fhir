@@ -1,7 +1,8 @@
 # Repo tidy-up and Cloudflare hosting: design
 
-Date: 2026-11-19. Status: approved in conversation, section by section (architecture,
-phase 1, request handling, accounts and testing); written spec awaiting the owner's review.
+Date: 2026-11-19. Status: implemented 2026-11-19 (plan
+`docs/design/plans/2026-11-19-tidy-up-and-cloudflare-hosting.md`; live check results at the
+end; check 2 partial, owner board check open). Approved by the owner 2026-11-19.
 Supersedes the **topology** of `2026-10-08-public-exposure-request-history-design.md`
 (rulings P2, P3, P4); that spec's request history and WebSocket stream stay open.
 

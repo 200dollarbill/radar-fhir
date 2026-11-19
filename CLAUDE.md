@@ -68,17 +68,21 @@ do not reopen it.
   gets the plugged-in board's session (preview, then Record). All pages share a top bar.
   Flashed 2026-11-18: the AtomS3R answers `BOARD?` (ID `CCBA97030AD4`). Spec:
   `docs/design/specs/2026-11-18-board-sessions-and-navigation-design.md`.
-- **Repo tidy-up and Cloudflare hosting (2026-11-19): spec written, not implemented.**
-  Phase 1 renames folders by role (`website/`, `firmware/`, `hosting/`, `docs/design/`)
-  and adds a top-level README and Makefile. Phase 2 serves the site from a free Cloudflare
-  Worker that forwards API calls to this laptop through Workers VPC. Spec:
-  `docs/design/specs/2026-11-19-tidy-up-and-cloudflare-hosting-design.md`.
+- **Repo tidy-up and Cloudflare hosting (2026-11-19): implemented.** Folders renamed by
+  role, top-level README and Makefile. The site is live at `https://prata.haifa.workers.dev`
+  while the laptop runs `make server` and `make tunnel`: a free Cloudflare Worker serves the
+  pages and forwards API calls through Workers VPC (tunnel `prata-laptop`). Accounts are
+  created on the laptop (`add-account`; guides in `docs/accounts/`). Live checks 1 and 3 to
+  7 passed; check 2 (login rate limit) is partial: slow guessing is not stopped, fix is the
+  owner's call. Not yet done: the owner's real-board check on the hosted address. Results:
+  end of `docs/design/specs/2026-11-19-tidy-up-and-cloudflare-hosting-design.md`.
 - The old roadmap's device profile is no longer the headline goal. Add a profile only
   if the website design needs one.
 
 "SATUSEHAT-compatible" means following the Indonesian national platform's profiles,
-identifier systems and terminology while running entirely locally. We never call the
-hosted platform. Registration, API keys, Postman, DICOM and KYC are out of scope.
+identifier systems and terminology. Data is stored only on the owner's laptop; the public
+site is a Cloudflare Worker that forwards requests to it. We never call the hosted
+platform. Registration, API keys, Postman, DICOM and KYC are out of scope.
 
 ## Repo map
 
@@ -96,10 +100,13 @@ docs/reference/raw/             93 scraped pages + FETCH-LOG.md: evidence, never
 docs/reference/claude/          31 dense FHIR/SATUSEHAT files + INDEX.md: what YOU load
 docs/reference/human/           prose guides for the project owner
 docs/design/{specs,plans,reports} specs, implementation plans, build reports
-docs/RUN-GUIDE.md               owner's walkthrough: server, board, website
+docs/RUN-GUIDE.md               owner's walkthrough: server, board, website, hosted site
+docs/HOW-IT-WORKS.md            the whole flow, radar to database, roles, failures
+docs/accounts/                  account setup guides (admin, doctor, patient; placeholders)
 fhir_server/, tests/            server and its tests (internals: fhir_server/README.md)
 device_client/, firmware/       Python device client, board firmware (firmware/radar_json/)
 website/                        Sessions, Capture, Review pages (plain JS), Node tests
+hosting/                        Cloudflare Worker: build.mjs, src/worker.js, wrangler.jsonc, tests
 website/src/dsp/, eval/         display processing (demodulation, filters) and its evaluation
 docs/eval/                      generated evaluation reports (do not hand-edit)
 tools/scrape/                   scraper, staleness check, view linter, 34 tests
@@ -148,13 +155,21 @@ make setup       # .venv + pip install -e .
 make server      # loads .env/prata.env, serves http://127.0.0.1:8000 (website at /capture/)
 make test        # all of: .venv/bin/python -m pytest tests -q
                  #         node --test "website/tests/*.test.js"
+                 #         node --test "hosting/tests/*.test.js"
                  #         python3 -m pytest tools/scrape/tests -q   (34 tests)
                  #         python3 tools/scrape/lint_views.py        (must print "0 problem(s)")
 make eval        # node website/eval/run.mjs: rescore display methods, rewrites docs/eval/
 make firmware    # arduino-cli compile --fqbn "$FQBN" firmware/radar_json
 make flash       # compile, then arduino-cli upload -p /dev/ttyACM0 (override: PORT=...)
                  # FQBN = m5stack:esp32:m5stack_atoms3r:USBMode=hwcdc,CDCOnBoot=cdc
+make tunnel      # TUNNEL_TOKEN from .env/prata.env → cloudflared tunnel run (hosted site)
+make deploy      # hosting/: node build.mjs && wrangler deploy → https://prata.haifa.workers.dev
 python3 tools/scrape/check.py   # detect upstream doc drift (~3 min, network)
+
+# accounts (laptop only; password asked twice, or --from-env VAR)
+.venv/bin/python -m fhir_server add-account --role {admin,doctor,patient} --username U [--name N] [--ref Patient/<id>]
+.venv/bin/python -m fhir_server list-accounts
+.venv/bin/python -m fhir_server disable-account --username U
 ```
 
 The real database is `data/fhir_server.db`. Never run `seed --reset` on it.
