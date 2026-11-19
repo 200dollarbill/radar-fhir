@@ -595,26 +595,111 @@ Use the scratch server from Task 10. `URL` = the deployed address.
 ### Task 12: Documentation for the hosted setup
 
 **Files:**
+- Create: `docs/HOW-IT-WORKS.md`, `docs/accounts/README.md`, `docs/accounts/admin.md`,
+  `docs/accounts/doctor.md`, `docs/accounts/patient.md` (owner request, 2026-11-19)
 - Modify: `README.md`, `docs/RUN-GUIDE.md`, `CLAUDE.md`, the spec's Status line
 
-- [ ] **Step 1: `README.md`** gains a **Hosted site** section:
-  - the URL, and that anyone can open it but only accounts you create can log in;
-  - `make server` plus `make tunnel` (online only while both run);
-  - `make deploy` (only when pages or the Worker change);
-  - the three account commands, with an example each.
-- [ ] **Step 2: `docs/RUN-GUIDE.md`** gains:
+Write every claim in the new documents from the code as it stands after Tasks 1 to 11,
+not from this plan or the spec. Name the file behind each step so a reader can find the
+code. Owner-facing prose: plain English, no FHIR jargon without a one-line gloss.
+
+- [ ] **Step 1: `docs/HOW-IT-WORKS.md`**: the whole program's flow, separate from the
+  README. Sections, in this order:
+  1. **The pieces:** one table with each piece, its folder and what it does: board firmware,
+     website pages, Worker, tunnel, server, database.
+  2. **One recording, end to end:** a Mermaid sequence diagram plus numbered steps:
+     - the board samples I/Q at 100 Hz and writes JSON lines over USB;
+     - the capture page reads them over Web Serial, asks `BOARD?`, and gets the board's
+       session from `/api/board/session`;
+     - the preview shows the display processing (`hybrid`, display only);
+     - Record cuts chunks, the outbox keeps them in IndexedDB, and the uploader posts each
+       chunk as an Observation and retries on failure;
+     - hosted only: the Worker forwards the post through the tunnel;
+     - the server checks the login and the rules, validates the resource, and stores it in
+       `data/fhir_server.db`.
+  3. **Logging in and roles:** how a login becomes a token (lifetime, what the token
+     carries), and one table of who may read or write what for admin, doctor, patient and
+     board (from `fhir_server/authz.py` and `fhir_server/services/sessions.py`).
+  4. **Boards and sessions:** board identity (`BOARD?`, chip ID, key), registration, test
+     patients, and a session as an Encounter that ties a board to a patient and a doctor.
+  5. **What is stored:** the resource types written, what each holds, and the database file.
+  6. **When something fails:** offline laptop or tunnel (503, outbox waits, no duplicates
+     on drain), too many logins (429), account management from the web (403), rejected
+     data (the validation error the page shows).
+  7. **Local and hosted:** the same pages and server; hosted adds the Worker and the tunnel
+     (Mermaid flowchart of both paths).
+  8. **Not built yet:** the doctor's integrated view (RME, RADAR JVP, 12-lead ECG), the
+     patient page, ECG input, and radar-derived heart rate (firmware values are
+     placeholders). Link to the account guides' placeholder sections.
+- [ ] **Step 2: `docs/accounts/`**: account setup guides.
+  - **`README.md`:**
+    - the three roles in one table;
+    - account management is laptop-only (the Worker returns 403);
+    - `add-account`, `list-accounts` and `disable-account`, with an example each;
+    - password entry (prompt twice, or `--from-env`), username rule `^[A-Za-z0-9._-]{3,32}$`;
+    - a disabled account is refused on its next request;
+    - links to the three role guides.
+  - **Each role guide** (`admin.md`, `doctor.md`, `patient.md`) has these sections:
+    - **Create the account:** the exact command.
+    - **Log in:** local and hosted address; which page to open.
+    - **What this account can do today:** from the code.
+    - **Not built yet:** each unbuilt feature on its own line, starting with
+      `> **Placeholder (not implemented yet):**` and naming what will go there, so it is
+      easy to find and fill in later.
+  - **Role-specific content:**
+    - **admin:**
+      - the existing `admin` login, and creating a named admin;
+      - registering a board, creating a test patient, opening a session on behalf of a
+        doctor;
+      - listing and disabling accounts.
+    - **doctor:**
+      - creating the account makes a Practitioner with a synthetic NIK;
+      - a new doctor sees no patients until an admin opens a session that names them
+        (`participates_in_patient`), so the guide says to do that first;
+      - opening and ending their own sessions; reading their sessions' Observations.
+      - Placeholder: the integrated patient view.
+    - **patient:**
+      - finding the `Patient/<id>` to pass to `--ref`;
+      - what logging in shows today (the not-staff message on the sessions page);
+      - the API can read the patient's own Patient, Encounter and Observation.
+      - Placeholder: the patient's own-record page.
+- [ ] **Step 3: `README.md`** gains:
+  - a **Hosted site** section:
+    - the URL, and that anyone can open it but only accounts you create can log in;
+    - `make server` plus `make tunnel` (online only while both run);
+    - `make deploy` (only when pages or the Worker change);
+    - one line linking `docs/accounts/`.
+  - In **Read next**, `docs/HOW-IT-WORKS.md` goes first, then `docs/accounts/README.md`.
+- [ ] **Step 4: `docs/RUN-GUIDE.md`** gains:
   - a "Hosted site" section: the one-time setup (Task 10 steps 1 to 4) and day to day;
-  - an "Accounts" section;
+  - an "Accounts" line linking `docs/accounts/README.md` (no copy of its content);
   - troubleshooting rows: `PRATA server is offline` (start `make server` and `make tunnel`),
     `Too many login attempts` (wait a minute), 403 on account management (use the laptop CLI),
     and "tunnel not connected" (check the token in `.env/prata.env`).
-- [ ] **Step 3: `CLAUDE.md`.**
+- [ ] **Step 5: `CLAUDE.md`.**
   - Replace the sentence "...while running entirely locally." with "...Data is stored only on
     the owner's laptop; the public site is a Cloudflare Worker that forwards requests to it. We
     never call the hosted platform."
   - Change the status bullet to "implemented", citing the live check results.
-  - The repo map gains `hosting/`; the Commands block gains `tunnel`, `deploy` and the account commands.
-- [ ] **Step 4:** The spec's Status line becomes "implemented 2026-11-.. (plan
+  - The repo map gains `hosting/`, `docs/HOW-IT-WORKS.md` and `docs/accounts/`.
+  - The Commands block gains `tunnel`, `deploy` and the account commands.
+- [ ] **Step 6: Check the new documents against the repo.**
+  - Every backticked repo path in `docs/HOW-IT-WORKS.md` and `docs/accounts/*.md` exists.
+    URL paths (`/api/...`) start with `/` and references (`Patient/<id>`) with a capital, so
+    the pattern skips them. Expected: no output.
+
+    ```bash
+    grep -ohE '`[a-z_][a-z_./-]*/[A-Za-z0-9_.-]+`' docs/HOW-IT-WORKS.md docs/accounts/*.md \
+      | tr -d '`' | sort -u | while read -r p; do test -e "$p" || echo "missing $p"; done
+    ```
+  - Run each account command from the guides once against a scratch database
+    (`FHIR_DB_PATH=$SCR/doc.db`, `--from-env`), then `rm -rf $SCR`. Expected: each one
+    succeeds as the guide says.
+  - `grep -c 'Placeholder (not implemented yet)' docs/accounts/*.md` gives at least 1 for
+    `doctor.md` and `patient.md`.
+- [ ] **Step 7:** The spec's Status line becomes "implemented 2026-11-.. (plan
   `docs/design/plans/2026-11-19-tidy-up-and-cloudflare-hosting.md`)". `make test` passes.
-- [ ] **Step 5: Commit** (message: `docs: hosted site, accounts and run guide`). Ask the owner
-  before any push.
+- [ ] **Step 8: Commit.**
+  - Files: the five new documents plus `README.md docs/RUN-GUIDE.md CLAUDE.md` and the spec.
+  - Message: `docs: how it works, account guides, hosted site`.
+  - Ask the owner before any push.

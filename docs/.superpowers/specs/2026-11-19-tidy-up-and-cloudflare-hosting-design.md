@@ -294,6 +294,11 @@ click).
 
 All suites pass, live checks 1 to 7 pass, and `README.md`, `docs/RUN-GUIDE.md` and
 `CLAUDE.md` (status, commands, the data-location sentence) describe the hosted setup.
+Two new documents exist, written from the code (owner request, 2026-11-19):
+- `docs/HOW-IT-WORKS.md`: the whole program's flow, kept outside the README.
+- `docs/accounts/`: setup guides for admin, doctor and patient. Features not built yet
+  (the doctor's integrated view, the patient's own-record page) are marked placeholders.
+
 Committed, not pushed.
 
 ## Out of scope
