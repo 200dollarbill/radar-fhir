@@ -4,30 +4,14 @@ A standalone, local-only **FHIR R4 (4.0.1)** server shaped like SATUSEHAT:
 three roles (admin / doctor / patient), provisioned device tokens for direct
 Observation ingest, SATUSEHAT-style `OperationOutcome` errors with RuleNumbers.
 
-Design authority: `docs/.superpowers/specs/2026-09-29-fhir-r4-server-walking-skeleton-design.md`
-Implementation plan: `docs/.superpowers/plans/2026-09-29-fhir-r4-server-walking-skeleton.md`
+Design authority: `docs/design/specs/2026-09-29-fhir-r4-server-walking-skeleton-design.md`
+Implementation plan: `docs/design/plans/2026-09-29-fhir-r4-server-walking-skeleton.md`
 
 **This server never calls the hosted SATUSEHAT platform. No API keys, no
 registration, no outbound FHIR calls — ever.** Everything runs against a local
 SQLite file.
 
-## Run
-
-```bash
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-FHIR_ADMIN_PASSWORD=<choose> .venv/bin/python -m fhir_server seed --reset
-FHIR_JWT_SECRET=<choose> .venv/bin/python -m fhir_server serve --port 8000
-```
-
-`seed --reset` wipes and rebuilds the DB, then prints a JSON summary on its
-**last stdout line**: `admin_password`, `doctor_password`, `patient_password`,
-`device_token`, `org_id`, `location_id`, `practitioner_id`, `patient_id`,
-`device_id`. (Passwords come from `FHIR_ADMIN_PASSWORD` / `FHIR_DOCTOR_PASSWORD`
-/ `FHIR_PATIENT_PASSWORD`, or are generated and printed once.)
-
-If `FHIR_JWT_SECRET` is unset, `seed`/`serve` generate one and append it to
-`.env` (process-local fallback if that file cannot be written).
+Run and test: see `README.md` and `docs/RUN-GUIDE.md`.
 
 ## Endpoints
 
@@ -64,9 +48,9 @@ write → 415; both as `OperationOutcome`.
 ## Device ingest contract
 
 The Python double `device_client/client.py::submit_heart_rate` and the ESP32
-firmware `arduino/radar_json/ingest.h` speak the identical contract: a
+firmware `firmware/radar_json/ingest.h` speak the identical contract: a
 heart-rate `Observation` POSTed to `/fhir-r4/v1/Observation` with the
-provisioned `Bearer` token. See `arduino/radar_json/README.md` for firmware
+provisioned `Bearer` token. See `firmware/radar_json/README.md` for firmware
 config (config.h is gitignored; **do not upload** until GPIO wiring is
 confirmed).
 
@@ -87,14 +71,7 @@ DOC=$(curl -s $B/auth/token -d '{"username":"doctor","password":"<seed>"}' | jq 
 
 Full scripted version: `tests/test_scenario_e2e.py`.
 
-## Tests
-
-```bash
-.venv/bin/python -m pytest tests -q          # server suite
-python3 -m pytest .tools/scrape/tests -q     # reference-compilation suite (34)
-python3 .tools/scrape/lint_views.py          # must print "0 problem(s)"
-/home/pingwalk/.local/bin/arduino-cli compile --fqbn m5stack:esp32:m5stack_cores3 arduino/radar_json
-```
+## Validation
 
 Validation is layered: fhir.resources (R4B models) structural parse →
 per-resource SATUSEHAT rules → reference existence → persist

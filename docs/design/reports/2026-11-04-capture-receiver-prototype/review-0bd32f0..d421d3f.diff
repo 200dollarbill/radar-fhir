@@ -1,0 +1,3872 @@
+# Review package: 0bd32f0..HEAD
+
+## Commits
+d421d3f test(receiver): chunk round trip through the real server, and run guide
+e092b36 fix(receiver): close serial port after pipe ends; throttle status refresh
+54f8aba feat(receiver): capture page served at /capture
+aace663 fix(receiver): only line-source failures count as disconnected
+c22bf64 feat(receiver): session card parsing and capture controller
+e646f8d feat(receiver): durable outbox and retrying uploader
+59518e4 feat(receiver): group samples into chunks and build Observations
+0997823 feat(receiver): parse serial lines and simulate the device
+3d3644e feat(server): capture-session command prints a session card
+45bc75d feat(server): conditional create for Observation retries
+f49227b feat(server): validate raw radar capture Observations
+
+## Files changed
+ .gitignore                                         |   1 +
+ CLAUDE.md                                          |   6 +
+ .../plans/2026-11-04-capture-receiver-prototype.md | 614 +++++++++++++++++++++
+ fhir_server/README.md                              |  21 +
+ fhir_server/app.py                                 |   9 +
+ fhir_server/cli.py                                 |  97 ++++
+ fhir_server/db.py                                  |   3 +
+ fhir_server/routes/fhir.py                         |  12 +-
+ fhir_server/services/fhir_service.py               |  60 ++
+ fhir_server/validation/rules_common.py             |   1 +
+ fhir_server/validation/rules_observation.py        | 136 ++++-
+ receiver/app.js                                    | 145 +++++
+ receiver/index.html                                |  41 ++
+ receiver/package.json                              |   1 +
+ receiver/src/capture.js                            |  97 ++++
+ receiver/src/card.js                               |  32 ++
+ receiver/src/chunker.js                            |  88 +++
+ receiver/src/coalesce.js                           |  21 +
+ receiver/src/jsonlines.js                          |  68 +++
+ receiver/src/observation.js                        |  53 ++
+ receiver/src/outbox.js                             |  85 +++
+ receiver/src/plot.js                               |  48 ++
+ receiver/src/serial.js                             |  26 +
+ receiver/src/simulator.js                          |  48 ++
+ receiver/src/uploader.js                           | 106 ++++
+ receiver/tests/capture.test.js                     | 101 ++++
+ receiver/tests/card.test.js                        |  29 +
+ receiver/tests/chunker.test.js                     | 185 +++++++
+ receiver/tests/coalesce.test.js                    |  42 ++
+ receiver/tests/fixtures/make_chunk.mjs             |  37 ++
+ receiver/tests/jsonlines.test.js                   | 103 ++++
+ receiver/tests/observation.test.js                 |  88 +++
+ receiver/tests/outbox.test.js                      |  52 ++
+ receiver/tests/plot.test.js                        |  35 ++
+ receiver/tests/simulator.test.js                   |  54 ++
+ receiver/tests/uploader.test.js                    | 148 +++++
+ tests/test_capture_e2e.py                          |  47 ++
+ tests/test_cli_capture_session.py                  | 109 ++++
+ tests/test_conditional_create.py                   | 225 ++++++++
+ tests/test_routes.py                               |  10 +
+ tests/test_rules_observation.py                    | 159 ++++++
+ 41 files changed, 3222 insertions(+), 21 deletions(-)
+
+## Diff
+diff --git a/.gitignore b/.gitignore
+index e9f59b4..ca5a530 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -1,10 +1,11 @@
+ .goutputstream-*
+ __pycache__/
+ *.pyc
+ .venv/
+ .tools/
+ PraTAVENV/
+ arduino/radar_json/config.h
+ tools/
+ .env
+ *.db
++apk/
+diff --git a/CLAUDE.md b/CLAUDE.md
+index efb07ff..5bf9c18 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -32,20 +32,24 @@ do not reopen it.
+ ## Status
+ 
+ - **Reference compilation: done.** See below.
+ - **FHIR R4 server: walking skeleton implemented, and the base the website builds on.**
+   Proves admin-provision → doctor-opened Encounter → device heart-rate Observation →
+   doctor read → patient own-record, with local JWT roles, device tokens,
+   SATUSEHAT-shaped OperationOutcome validation and compile-gated firmware. Spec:
+   `docs/.superpowers/specs/2026-09-29-fhir-r4-server-walking-skeleton-design.md`.
+ - **Public exposure and request history:** spec written, not implemented
+   (`docs/.superpowers/specs/2026-10-08-public-exposure-request-history-design.md`).
++- **Raw capture receiver: prototype.** A browser page at `/capture/` posts raw radar
++  chunks to the server. Tested end to end with the simulator (round trip through the
++  real server); the browser and hardware paths are not yet verified. Run guide:
++  `fhir_server/README.md`.
+ - **Firmware heart-rate values are placeholders**, not radar-derived measurements.
+ - The old roadmap's device profile is no longer the headline goal. Add a profile only
+   if the website design needs one.
+ 
+ "SATUSEHAT-compatible" means following the Indonesian national platform's profiles,
+ identifier systems and terminology while running entirely locally. We never call the
+ hosted platform. Registration, API keys, Postman, DICOM and KYC are out of scope.
+ 
+ ## Repo map
+ 
+@@ -55,20 +59,21 @@ docs/proposal_md/               proposal.md, citations, source and claim catalog
+ docs/proposal_guide/            how to write the proposal (style rules)
+ docs/presentation/ets/          sidang outline, fishbone.md
+ docs/notul/                     consultation notes
+ docs/papers/                    papers by subject (PDF + md/); search/ = literature results
+ docs/reference/raw/             93 scraped pages + FETCH-LOG.md: evidence, never hand-edit
+ docs/reference/claude/          31 dense FHIR/SATUSEHAT files + INDEX.md: what YOU load
+ docs/reference/human/           prose guides for the project owner
+ docs/.superpowers/{specs,plans} specs and implementation plans
+ fhir_server/, tests/            server and its tests (run guide: fhir_server/README.md)
+ device_client/, arduino/        Python device client, firmware
++receiver/                       browser raw-capture page (plain JS) and its Node tests
+ .tools/scrape/                  scraper, staleness check, view linter, 34 tests
+ ```
+ 
+ **For FHIR or SATUSEHAT facts start at `docs/reference/claude/INDEX.md`.** Load the two
+ or three files a task needs. Every `claude/*.md` ends with `## Sources`. **Trace, don't
+ guess:** claude → its Sources → raw. A fact only in `human/` is not evidence.
+ `build.fhir.org` is the R6 CI build; SATUSEHAT is R4, and `hl7.org/fhir/R4/` binds us.
+ 
+ ## Findings that constrain the server
+ 
+@@ -96,20 +101,21 @@ without running it.
+ - **Review for fidelity.** When output derives from a source, the review re-derives a
+   sample from that source.
+ - **Hand artifacts over as files**, passed by path.
+ - **Record contradictions verbatim; resolve them in a ruling.**
+ - **Cheap model for transcription, capable model for judgement.** Name the model.
+ 
+ ## Commands
+ 
+ ```bash
+ .venv/bin/python -m pytest tests -q          # server tests
++node --test "receiver/tests/*.test.js"       # receiver tests
+ python3 -m pytest .tools/scrape/tests -q     # 34 tests
+ python3 .tools/scrape/lint_views.py          # must print "0 problem(s)"
+ python3 .tools/scrape/check.py               # detect upstream doc drift (~3 min, network)
+ ```
+ 
+ ## Conventions
+ 
+ - Never hand-edit `docs/reference/raw/`. Keep `claude/*.md` ≤ 400 lines with `## Sources`
+   and an `INDEX.md` line (the linter enforces this).
+ - Indonesian terms stay in Indonesian with an English gloss on first use.
+diff --git a/docs/.superpowers/plans/2026-11-04-capture-receiver-prototype.md b/docs/.superpowers/plans/2026-11-04-capture-receiver-prototype.md
+new file mode 100644
+index 0000000..796aa25
+--- /dev/null
++++ b/docs/.superpowers/plans/2026-11-04-capture-receiver-prototype.md
+@@ -0,0 +1,614 @@
++# Capture Receiver and Backend Prototype Implementation Plan
++
++> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
++
++**Goal:** A Chrome page reads raw radar samples over USB serial (or a simulator), plots them live, and uploads them as FHIR Observations that survive retries and server outages.
++
++**Architecture:** Plain ES modules in `receiver/`, served by the existing FastAPI app at `/capture/`. Pure modules (parser, chunker, builder, outbox, uploader, controller) are tested under Node; browser-only code stays in thin files checked by hand. The server gains a raw-capture validation rule, R4 conditional create and a `capture-session` CLI command.
++
++**Tech Stack:** Python 3 / FastAPI / SQLite / pytest (existing). Browser JavaScript with Web Serial, IndexedDB and canvas. `node --test` (Node 22). No npm dependencies and no build step.
++
++**Spec:** `docs/.superpowers/specs/2026-11-04-capture-receiver-prototype-design.md`
++
++## Global Constraints
++
++- Everything runs at `http://127.0.0.1:8000`. No Cloudflare, nginx or Bluetooth in this plan.
++- Firmware is not changed. `arduino/radar_json/radar_json.ino` is the input format.
++- Never label output as JVP, diagnosis, or a measurement. Simulated data carries `"source":"SIMULATED"` in `note` and "SIMULATED" on screen.
++- Synthetic subjects only.
++- Code system: `urn:prata:radar-signal`. Top-level code `raw-capture`, display `Raw radar I/Q capture`. Component codes `i-voltage`, `q-voltage` (UCUM `V`), `accel-x`, `accel-y`, `accel-z` (UCUM `[g]`), `gyro-x`, `gyro-y`, `gyro-z` (UCUM `deg/s`).
++- Chunk limit: 1000 samples at most. `period` = `1000 / fs` ms. No `category` on raw chunks.
++- Serial baud 115200.
++- Commit message ending: `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
++- Commands: `.venv/bin/python -m pytest tests -q` and `node --test receiver/tests/`. Baseline: 134 pytest tests pass.
++
++**Facts the code imposes, not stated in the spec:**
++
++- `canonicalize_datetimes` truncates to whole seconds, so `effectiveDateTime` has 1 s resolution. Order within a capture comes from segment and chunk index.
++- Encounters must be created as `arrived`, then moved to `in-progress` with a PUT.
++- Values are written with JavaScript's number-to-string, so `1.650000` is stored as `1.65`. The value is identical and chunks are slightly smaller.
++- `captureId` is `cap-<uuid>`. The prefix stops an identifier from looking date-shaped to `check_datetimes`.
++
++## Review Focus
++
++1. A tab reopened with pending chunks from session S001 and a card for S002 is pasted: S002 uploads normally and S001's chunks wait, reported on screen, instead of blocking the queue on `403`. Test in Task 6.
++2. A chunk is retried after its Encounter finished, because the first response was lost: the server returns `200` with the stored record, not a rejection. Test in Task 2.
++3. Serial reads split lines anywhere, the port opens mid-line, lines end in CRLF, and a stream can lack newlines: only complete lines are parsed and memory stays bounded. Test in Task 4.
++4. A board reboots mid-chunk, or a gap crosses a chunk boundary: no samples lost, no chunk over 1000, and all channels stay equal in length. Tests in Task 5.
++5. The owner pastes garbage, an empty string, or a seed summary instead of a session card: a clear message and nothing uploaded. Test in Task 7.
++
++---
++
++### Task 1: Raw-capture validation rule
++
++**Files:**
++- Modify: `fhir_server/validation/rules_observation.py`, `fhir_server/validation/rules_common.py`, `.gitignore`
++- Test: `tests/test_rules_observation.py`
++
++**Interfaces:**
++- Produces: `validate_observation` keeps its signature and dispatches on `code.coding[0]`. Constants `RAW_SYSTEM = "urn:prata:radar-signal"`, `RAW_CODE = "raw-capture"`.
++
++- [ ] **Step 1: Write failing tests** in `tests/test_rules_observation.py`.
++
++Add a helper `raw(**kw)` returning a valid chunk with all eight components of three samples, plus:
++
++```python
++def test_raw_capture_valid(): assert errs(raw()) == []
++def test_raw_accepts_error_tokens():  # data "1.65 E -0.5"
++def test_raw_requires_i_and_q():      # drop q-voltage -> issue
++def test_raw_rejects_unknown_component_code():
++def test_raw_rejects_duplicate_component_code():
++def test_raw_rejects_top_level_value():   # valueQuantity present -> issue
++def test_raw_rejects_non_sampled_component():  # valueQuantity in a component
++def test_raw_rejects_dimensions_not_one():
++def test_raw_rejects_period_zero():
++def test_raw_rejects_mismatched_period():
++def test_raw_rejects_mismatched_sample_count():
++def test_raw_rejects_bad_token():     # data "1.65 abc"
++def test_raw_rejects_nan_token():     # data "1.65 NaN"
++def test_raw_accepts_exponent_token():  # data "1e-7"
++def test_raw_rejects_over_1000_samples():  # 1001 tokens
++def test_raw_accepts_exactly_1000_samples():
++def test_raw_rejects_empty_data():
++def test_raw_requires_exactly_one_identifier():  # 0 and 2 -> issue
++def test_raw_requires_identifier_value():
++def test_raw_keeps_device_rule():     # wrong device_ref -> issue, as heart rate
++def test_raw_keeps_finished_encounter_rule():
++def test_heart_rate_code_still_required_for_other_codes():  # LOINC other than 8867-4 still rejected
++```
++
++Each reject test asserts at least one issue whose `expression` starts with `Observation`.
++
++- [ ] **Step 2: Run to verify failure**
++
++Run: `.venv/bin/python -m pytest tests/test_rules_observation.py -q`
++Expected: new tests FAIL with a code-not-found issue on valid raw payloads. Existing tests pass.
++
++- [ ] **Step 3: Implement.** Split `validate_observation` into shared checks (status, subject, encounter, device, assignment, identifier system) and two branches: `_heart_rate_rules` (existing code, category and `valueQuantity` checks unchanged) and `_raw_capture_rules`. Use `L_OBSERVATION_VALUE` as the rule number. Data tokens match `^-?\d+(\.\d+)?([eE][+-]?\d+)?$` or are exactly `E`, `L`, `U`. JavaScript can write very small numbers like `1e-7`, so the exponent form must pass.
++
++Add `"urn:prata:radar-signal"` to `ALLOWED_SYSTEMS`. Add `apk/` to `.gitignore`.
++
++- [ ] **Step 4: Run to verify pass**
++
++Run: `.venv/bin/python -m pytest tests -q`
++Expected: all pass, including the original 134.
++
++- [ ] **Step 5: Commit**
++
++```bash
++git add fhir_server/validation/rules_observation.py fhir_server/validation/rules_common.py tests/test_rules_observation.py .gitignore docs/.superpowers/plans/2026-11-04-capture-receiver-prototype.md
++git commit -m "feat(server): validate raw radar capture Observations"
++```
++
++---
++
++### Task 2: Conditional create
++
++**Files:**
++- Modify: `fhir_server/db.py`, `fhir_server/services/fhir_service.py`, `fhir_server/routes/fhir.py`, `fhir_server/app.py` (CapabilityStatement)
++- Test: `tests/test_conditional_create.py`
++
++**Interfaces:**
++- Consumes: raw rule from Task 1.
++- Produces: `FhirService.conditional_create(principal, resource_type, payload, if_none_exist: str) -> tuple[str, dict, bool]` returning `(id, doc, created)`. Table `conditional_keys(type TEXT, identifier_value TEXT, resource_id TEXT, PRIMARY KEY (type, identifier_value))`. Route status `201` when created, `200` otherwise. `FhirService.create` is unchanged.
++
++- [ ] **Step 1: Write failing tests** in `tests/test_conditional_create.py`, using the `client` pattern from `tests/test_routes.py`: seed an org, patient, in-progress Encounter and device token.
++
++```python
++def test_first_post_201_second_200_same_id():
++def test_second_post_stores_no_new_row():  # count of Observation rows stays 1
++def test_system_pipe_value_form_matches_value_only_key():
++    # header "identifier=<sys>|v" after a post with "identifier=v" -> 200
++def test_retry_after_encounter_finished_returns_200():  # Review Focus 2
++def test_other_device_gets_403_not_the_record():
++def test_header_param_other_than_identifier_400():
++def test_malformed_header_400():       # "identifier" and "identifier="
++def test_header_value_not_in_payload_400():  # cannot poison another chunk's key
++def test_non_observation_type_400():
++def test_invalid_payload_400_records_no_key():  # corrected retry then gets 201
++def test_key_of_deleted_resource_creates_again():  # admin DELETE, then POST -> 201
++def test_plain_post_may_reuse_identifier():  # two plain POSTs "radar-1" -> both 201
++def test_plain_post_ignores_conditional_keys():  # conditional then plain, same value -> 201
++```
++
++- [ ] **Step 2: Run to verify failure**
++
++Run: `.venv/bin/python -m pytest tests/test_conditional_create.py -q`
++Expected: FAIL. The second POST returns `201`.
++
++- [ ] **Step 3: Implement.** Add the table to `SCHEMA`. It is `IF NOT EXISTS`, so existing databases gain it at `init`.
++
++`conditional_create` order:
++1. Parse the header. Accept exactly one `identifier=` parameter, taking the part after `|` when present. Otherwise raise `FhirError` with `400`.
++2. Reject any type other than Observation with `400`.
++3. Require the value to equal a `payload.identifier[].value`, otherwise `400`.
++4. Look up the key. On a hit with a live resource, run `authz.check(principal, "read", ...)` and return `(id, doc, False)`. This comes **before** validation so Review Focus 2 holds.
++5. On a hit with a deleted resource, delete the key and continue.
++6. Call `self.create(...)`, insert the key, return `(id, doc, True)`.
++
++In the `create` route, read the payload first, then branch on `request.headers.get("If-None-Exist")`. Everything after the `await` runs without yielding on the single event loop, so two retries cannot interleave.
++
++Set `conditionalCreate: true` on the Observation entry of the CapabilityStatement.
++
++- [ ] **Step 4: Run to verify pass**
++
++Run: `.venv/bin/python -m pytest tests -q`
++Expected: all pass.
++
++- [ ] **Step 5: Commit**
++
++```bash
++git add fhir_server/db.py fhir_server/services/fhir_service.py fhir_server/routes/fhir.py fhir_server/app.py tests/test_conditional_create.py
++git commit -m "feat(server): conditional create for Observation retries"
++```
++
++---
++
++### Task 3: `capture-session` CLI
++
++**Files:**
++- Modify: `fhir_server/cli.py`
++- Test: `tests/test_cli_capture_session.py`
++
++**Interfaces:**
++- Produces: `python -m fhir_server capture-session --label S001`. The last stdout line is JSON `{"token","patient":"Patient/<id>","encounter":"Encounter/<id>","device":"Device/<id>","org","label"}`.
++
++- [ ] **Step 1: Write failing tests**, using `run_cli` as in `tests/test_cli_seed.py`.
++
++```python
++def test_card_has_all_fields_and_references():
++def test_card_can_post_a_raw_chunk():  # valid raw chunk with this token -> 201
++def test_doctor_can_read_the_chunk():  # seeded doctor reads the Observation -> 200
++def test_two_sessions_get_different_patients():
++def test_same_label_twice_succeeds():
++def test_unseeded_db_exits_1_with_message():
++    assert p.returncode == 1 and "seed" in p.stderr
++def test_bad_label_rejected():  # "a b", "" -> nonzero exit, nothing created
++```
++
++- [ ] **Step 2: Run to verify failure**
++
++Run: `.venv/bin/python -m pytest tests/test_cli_capture_session.py -q`
++Expected: FAIL with an argparse error (invalid choice).
++
++- [ ] **Step 3: Implement `cmd_capture_session(args)`.** Label must match `^[A-Za-z0-9-]{1,32}$`.
++
++Take the first Organization, Location, Practitioner and Device from `resources.list`. If any is missing, print `database not seeded: run "seed" first` to stderr and exit 1.
++
++Use `FhirService(conn, Settings.from_env(db_path=args.db))` with `Principal(kind="admin")`:
++- **Patient:** NIK `"9900"` + 12 random digits, which is not a real province code and so marks it synthetic. Retry on collision. Name text `Sesi <label>`, and `birthDate`, `gender`, `multipleBirthBoolean` and `address` with `administrativeCode` copied in shape from `cmd_seed`. The validator requires these fields, and their values are placeholders.
++- **Encounter:** create as `arrived` with one history entry, identifier value `capture-<label>-<8 hex>`, and `participant` naming the Practitioner. Then `update` to `in-progress` with the history extended.
++- **Token:** `provision_device`.
++
++- [ ] **Step 4: Run to verify pass**
++
++Run: `.venv/bin/python -m pytest tests -q`
++Expected: all pass.
++
++- [ ] **Step 5: Commit**
++
++```bash
++git add fhir_server/cli.py tests/test_cli_capture_session.py
++git commit -m "feat(server): capture-session command prints a session card"
++```
++
++---
++
++### Task 4: Line parsing and simulator
++
++**Files:**
++- Create: `receiver/src/jsonlines.js`, `receiver/src/simulator.js`
++- Test: `receiver/tests/jsonlines.test.js`, `receiver/tests/simulator.test.js`
++
++**Interfaces:**
++- Produces:
++  - `parseLine(line: string) -> {kind:"ignored"} | {kind:"rejected", reason:string} | {kind:"sample", sample:Sample}`
++  - `Sample = {sampleIdx, fs, missed, I, Q, ax, ay, az, gx, gy, gz}`, all numbers
++  - `FIELDS`: the 14 serial field names
++  - `class LineSplitter { push(text: string) -> string[] }`
++  - `simulatorLines({fs=100, now=Date.now, sleep}) -> AsyncGenerator<string>`
++  - `formatLine(sampleIdx, fs, values) -> string`
++
++- [ ] **Step 1: Write failing tests**
++
++```js
++// jsonlines.test.js
++test("valid firmware line gives a sample")
++test("READY banner and ingest text are ignored, not rejected")
++test("blank line is ignored")
++test("broken {json is rejected")
++test("missing field is rejected, naming it")
++test("non-integer sample_idx or fs is rejected")
++test("negative sample_idx and fs of 0 are rejected")
++test("string I value is rejected")
++test("crc_ok:false is rejected with reason crc_ok")
++test("JSON array starting [ is ignored")  // does not start with {
++
++// Contract: the firmware's printf keys equal FIELDS
++test("FIELDS match radar_json.ino", () => {
++  const ino = readFileSync("arduino/radar_json/radar_json.ino", "utf8");
++  const keys = [...ino.matchAll(/\\"(\w+)\\":/g)].map(m => m[1]);
++  assert.deepEqual(keys, FIELDS);
++});
++
++// LineSplitter, Review Focus 3
++test("a line split across pushes comes out once, whole")
++test("two lines in one push come out in order")
++test("CRLF is stripped")
++test("a partial line stays buffered")
++test("a mid-line start parses as ignored")  // '":1.2,"Q":3}\n'
++test("over 4096 chars without newline is emitted and the buffer resets")
++
++// simulator.test.js
++test("each line parses to a sample with consecutive sampleIdx")
++test("I and Q stay inside 0 to 3.3 V")
++test("emits elapsed×fs lines after a long sleep, catching up")  // fake clock
++```
++
++- [ ] **Step 2: Run to verify failure**
++
++Run: `node --test receiver/tests/`
++Expected: FAIL with module not found.
++
++- [ ] **Step 3: Implement.** Field rules mirror `python_receiver/models.py` plus `sample_idx >= 0` and `fs > 0`. A trimmed line not starting with `{` is `ignored`.
++
++Simulator signal, from the app's `SimRadar`: `I = 1.65 + 0.4·cos(phase + 0.6)`, `Q = 1.65 + 0.4·sin(phase + 0.6)`, phase = respiration sine + pulse + small noise. IMU values fixed at `az = 1`, others 0. Each tick, yield `floor(elapsed × fs) − emitted` lines so a throttled background tab catches up.
++
++- [ ] **Step 4: Run to verify pass**
++
++Run: `node --test receiver/tests/`
++Expected: all pass. Run from the repo root, because the contract test reads a repo path.
++
++- [ ] **Step 5: Commit**
++
++```bash
++git add receiver/src/jsonlines.js receiver/src/simulator.js receiver/tests/
++git commit -m "feat(receiver): parse serial lines and simulate the device"
++```
++
++---
++
++### Task 5: Chunker and Observation builder
++
++**Files:**
++- Create: `receiver/src/chunker.js`, `receiver/src/observation.js`
++- Test: `receiver/tests/chunker.test.js`, `receiver/tests/observation.test.js`
++
++**Interfaces:**
++- Consumes: `Sample` from Task 4.
++- Produces:
++  - `class Chunker { constructor({chunkSize=1000, now=Date.now, onChunk}); addSample(sample); noteRejected(); flush() }`
++  - `Chunk = {segment, chunkIndex, fs, startTimeMs, channels:{I,Q,ax,ay,az,gx,gy,gz}, gapSamples, rejectedLines, deviceMissed}`. Channel arrays hold numbers or `"E"`.
++  - `identifierValue(captureId, chunk) -> string`, `<captureId>-<segment>-<chunkIndex>`
++  - `buildObservation(chunk, card, {captureId, source}) -> object`. `source` is `"serial"` or `"SIMULATED"`.
++
++- [ ] **Step 1: Write failing tests**
++
++```js
++// chunker.test.js
++test("1000 samples emit one chunk; chunk 2 gets index 1")
++test("gap of 3 fills 3 E in every channel and counts gapSamples 3")
++test("gap crossing a chunk boundary: both chunks 1000 long, none lost")  // Review Focus 4
++test("gap of 999 fills; gap of 1000 starts a new segment")
++test("sample_idx going backwards flushes and starts segment+1, chunkIndex 0")  // Review Focus 4
++test("repeated sample_idx starts a new segment")
++test("fs change flushes and starts a new segment")
++test("first sample at any index causes no gap")
++test("flush emits a partial chunk; flush with nothing emits nothing")
++test("noteRejected counts on the next emitted chunk, then resets")
++test("rejected count survives an empty flush")
++test("all channels have equal length in every emitted chunk")
++test("deviceMissed is the latest sample's missed")
++test("startTimeMs back-dates by leading gap entries")  // period × entries before the real sample
++
++// observation.test.js
++test("code, identifier, references and component order match the spec")
++test("note parses to {source, gap_samples, rejected_lines, device_missed}")
++test("period is 10 at fs 100 and 4 at fs 250")
++test("data joins numbers and E with single spaces")
++test("origin unit and UCUM code per channel: V, [g], deg/s")
++test("effectiveDateTime has the form YYYY-MM-DDThh:mm:ss+00:00")
++test("no category and no top-level value")
++test("SIMULATED source appears in note")
++```
++
++- [ ] **Step 2: Run to verify failure**
++
++Run: `node --test receiver/tests/`
++Expected: FAIL with module not found for the new files.
++
++- [ ] **Step 3: Implement.** With `gap = idx − lastIdx − 1`: `0` append, `1..999` fill then append, `>= 1000` new segment, negative or `idx == lastIdx` new segment. Spec D4: never read `epoch_id`. After each append, emit when the channel length reaches `chunkSize`, including during gap fill.
++
++When a chunk's first entry is added, `startTimeMs = now() − (fill entries remaining before the current real sample) × (1000 / fs)`.
++
++- [ ] **Step 4: Run to verify pass**
++
++Run: `node --test receiver/tests/`
++Expected: all pass.
++
++- [ ] **Step 5: Commit**
++
++```bash
++git add receiver/src/chunker.js receiver/src/observation.js receiver/tests/
++git commit -m "feat(receiver): group samples into chunks and build Observations"
++```
++
++---
++
++### Task 6: Outbox and uploader
++
++**Files:**
++- Create: `receiver/src/outbox.js`, `receiver/src/uploader.js`
++- Test: `receiver/tests/outbox.test.js`, `receiver/tests/uploader.test.js`
++
++**Interfaces:**
++- Consumes: Observation and `identifierValue` from Task 5.
++- Produces:
++  - `sessionKey(card) -> string`, `"<patient>|<device>"`
++  - Store interface: `put(record) -> id`, `update(record)`, `delete(id)`, `all() -> record[]` in id order. `class MemoryStore`, `class IndexedDbStore(dbName="prata-capture")`.
++  - `class Outbox { constructor(store); add({identifier, sessionKey, observation}); nextFor(sessionKey) -> record|null; remove(id); markRejected(id, reason); counts(sessionKey) -> {pending, rejected, otherSession} }`
++  - `class Uploader { constructor({outbox, fetchFn, card, sleep, onStatus, baseUrl="/fhir-r4/v1"}); step() -> "idle"|"sent"|"rejected"|"retry"|"auth"; start(); stop(); resume(card) }`
++
++- [ ] **Step 1: Write failing tests** (`MemoryStore`, fake `fetchFn`, fake `sleep`)
++
++```js
++// outbox.test.js
++test("nextFor returns the oldest pending record of that session")
++test("records survive into a new Outbox on the same store")
++test("markRejected keeps the record, excluded from nextFor, counted as rejected")
++test("add rejects with QuotaExceededError when the store throws it")
++
++// uploader.test.js
++test("POST sends Authorization, If-None-Exist: identifier=<value>, fhir+json")
++test("201 and 200 both delete the record")
++test("record stays until the response arrives")  // inspect the store during fetch
++test("fetch throwing keeps the record and returns retry")
++test("500 keeps the record and returns retry")
++test("backoff goes 1,2,4,8,16,30,30 s, and resets after success")
++test("401 and 403 return auth, keep the record, and stop sending until resume")
++test("400 marks rejected with OperationOutcome text and moves to next")
++test("400 with a non-JSON body gives reason 'HTTP 400'")
++test("chunks are sent oldest first, one at a time")
++test("other session's chunks are skipped and counted")  // Review Focus 1
++test("resume with their card sends them")  // Review Focus 1
++```
++
++- [ ] **Step 2: Run to verify failure**
++
++Run: `node --test receiver/tests/`
++Expected: FAIL with module not found for the new files.
++
++- [ ] **Step 3: Implement.** The reason text is the first `issue[].details.text` in the OperationOutcome. `IndexedDbStore` is a thin wrapper with an auto-increment key, covered by the manual check in Task 9. It calls `navigator.storage.persist()` once on open and ignores a refusal.
++
++- [ ] **Step 4: Run to verify pass**
++
++Run: `node --test receiver/tests/`
++Expected: all pass.
++
++- [ ] **Step 5: Commit**
++
++```bash
++git add receiver/src/outbox.js receiver/src/uploader.js receiver/tests/
++git commit -m "feat(receiver): durable outbox and retrying uploader"
++```
++
++---
++
++### Task 7: Session card and capture controller
++
++**Files:**
++- Create: `receiver/src/card.js`, `receiver/src/capture.js`
++- Test: `receiver/tests/card.test.js`, `receiver/tests/capture.test.js`
++
++**Interfaces:**
++- Consumes: Tasks 4 to 6.
++- Produces:
++  - `parseCard(text: string) -> Card`, throwing `Error` with a user-readable message
++  - `class Capture { constructor({outbox, sessionKey, card, source, onSample, onStatus, newId=() => "cap-"+crypto.randomUUID()}); async run(lines: AsyncIterable<string>) -> "ended"|"disconnected"|"quota"; stats -> {samples, gaps, rejected} }`
++
++`Capture.run` feeds lines through `parseLine` and `Chunker`, and writes each chunk to the outbox through a sequential promise chain, so chunk order is kept.
++
++- [ ] **Step 1: Write failing tests**
++
++```js
++// card.test.js, Review Focus 5
++test("a valid card parses")
++test("empty string gives a message saying to paste a card")
++test("non-JSON text gives a message saying it is not valid JSON")
++test("seed summary JSON is rejected, naming the missing field")
++test("patient without the Patient/ prefix is rejected")
++
++// capture.test.js
++test("lines reach onSample and the outbox")
++test("every chunk is in the outbox before run resolves")
++test("ending the iterable flushes the partial chunk and returns ended")
++test("the iterable throwing flushes and returns disconnected")
++test("store quota error stops reading and returns quota")
++test("each run has a new captureId")
++test("stats count samples, gaps and rejected lines")
++test("rejected line followed by the next index produces an E gap")
++```
++
++- [ ] **Step 2: Run to verify failure**
++
++Run: `node --test receiver/tests/`
++Expected: FAIL with module not found for the new files.
++
++- [ ] **Step 3: Implement** to the signatures above. Stop is done by the caller ending the line source, so `Capture` has no separate stop path.
++
++- [ ] **Step 4: Run to verify pass**
++
++Run: `node --test receiver/tests/`
++Expected: all pass.
++
++- [ ] **Step 5: Commit**
++
++```bash
++git add receiver/src/card.js receiver/src/capture.js receiver/tests/
++git commit -m "feat(receiver): session card parsing and capture controller"
++```
++
++---
++
++### Task 8: The page
++
++**Files:**
++- Create: `receiver/index.html`, `receiver/app.js`, `receiver/src/serial.js`, `receiver/src/plot.js`
++- Modify: `fhir_server/app.py`
++- Test: `receiver/tests/plot.test.js`, `tests/test_routes.py`
++
++**Interfaces:**
++- Consumes: all receiver modules.
++- Produces:
++  - `/capture/` static route
++  - `serialLines(port, {baudRate=115200}) -> AsyncGenerator<string>`
++  - `class Trace { constructor(capacity=1000); push(i, q); points(width, height) -> {i:[x,y][], q:[x,y][]} }`, plus `draw(canvas, trace)`
++
++- [ ] **Step 1: Write failing tests**
++
++```python
++# tests/test_routes.py
++def test_capture_page_served(client):
++    r = client.get("/capture/")
++    assert r.status_code == 200 and "Raw signal" in r.text
++
++def test_capture_module_has_js_mime(client):
++    r = client.get("/capture/src/jsonlines.js")
++    assert r.status_code == 200 and "javascript" in r.headers["content-type"]
++```
++
++```js
++// plot.test.js
++test("capacity keeps only the last 1000 points")
++test("a constant signal gives finite y values")  // no divide by zero
++test("points stay inside width and height")
++```
++
++- [ ] **Step 2: Run to verify failure**
++
++Run: `.venv/bin/python -m pytest tests/test_routes.py -q -k capture ; node --test receiver/tests/plot.test.js`
++Expected: `404` and module not found.
++
++- [ ] **Step 3: Implement.**
++
++`app.py`: mount `StaticFiles(directory=<repo>/receiver, html=True)` at `/capture`, after the routers.
++
++`index.html` has:
++- heading "Raw signal capture" and a fixed line: "Raw signal only. Not a measurement result or a clinical finding."
++- card paste box and Use card button
++- Connect serial, Start simulator and Stop buttons
++- canvas
++- status line showing samples received, chunks confirmed, chunks pending, gaps, rejected lines
++- an error area, and a large SIMULATED banner while the simulator runs
++
++`app.js` keeps the card in `sessionStorage` only, wrapped in try/catch, and connects:
++
++| Condition | Message or action |
++|---|---|
++| `navigator.serial` missing | Disable Connect: "This browser has no Web Serial. Use Chrome or Edge." The simulator stays usable. |
++| Run returned `disconnected` | "Disconnected. Click Connect to resume." No auto-reconnect |
++| Run returned `quota` | "Browser storage is full. Capture stopped." |
++| Uploader status `auth` | "Token invalid. Paste a new card." |
++| Rejected chunks | Show count and latest reason |
++| `otherSession > 0` | "N chunks belong to another session. Paste that session's card to send them." |
++| Load with pending chunks | Report them and start uploading once a card is set |
++
++`serial.js`: `port.open({baudRate})`, `TextDecoderStream`, `LineSplitter`. Stop calls `reader.cancel()`, and the port is closed in `finally`. A device-lost read error propagates to `Capture.run`.
++
++- [ ] **Step 4: Run to verify pass**
++
++Run: `.venv/bin/python -m pytest tests -q && node --test receiver/tests/`
++Expected: all pass.
++
++- [ ] **Step 5: Commit**
++
++```bash
++git add receiver/index.html receiver/app.js receiver/src/serial.js receiver/src/plot.js receiver/tests/plot.test.js fhir_server/app.py tests/test_routes.py
++git commit -m "feat(receiver): capture page served at /capture"
++```
++
++---
++
++### Task 9: End-to-end test, docs and browser check
++
++**Files:**
++- Create: `receiver/tests/fixtures/make_chunk.mjs`, `tests/test_capture_e2e.py`
++- Modify: `fhir_server/README.md`, `CLAUDE.md`
++
++**Interfaces:**
++- Consumes: everything above.
++- Produces: `node receiver/tests/fixtures/make_chunk.mjs '<card JSON>'` prints `{"observation":..., "identifier":..., "expected":{"I":[...], ...}}`. Lines come from `formatLine`, go through the real parser, chunker and builder, and include one gap.
++
++- [ ] **Step 1: Write the failing test**
++
++```python
++def test_chunk_round_trip(tmp_path):
++    # seed and capture-session via CLI, make_chunk.mjs via subprocess
++    r1 = post(obs, identifier); assert r1.status_code == 201
++    r2 = post(obs, identifier); assert r2.status_code == 200
++    assert r2.json()["id"] == r1.json()["id"]
++    stored = client.get(f"/fhir-r4/v1/Observation/{r1.json()['id']}", headers=auth).json()
++    for comp in stored["component"]:
++        got = comp["valueSampledData"]["data"].split(" ")
++        assert got == [str_token(v) for v in expected[channel(comp)]]
++```
++
++If `node` is missing, the test fails rather than skips, so a silent skip cannot hide the contract.
++
++- [ ] **Step 2: Run to verify failure**
++
++Run: `.venv/bin/python -m pytest tests/test_capture_e2e.py -q`
++Expected: FAIL because the fixture script does not exist.
++
++- [ ] **Step 3: Write the fixture.** Add a run guide section to `fhir_server/README.md`: `seed`, `capture-session`, `serve`, open `http://127.0.0.1:8000/capture/` in Chrome. In `CLAUDE.md`, update Status, add `receiver/` to the repo map and add the Node test command.
++
++- [ ] **Step 4: Run all tests**
++
++Run: `.venv/bin/python -m pytest tests -q && node --test receiver/tests/`
++Expected: all pass.
++
++- [ ] **Step 5: Commit**
++
++```bash
++git add receiver/tests/fixtures/make_chunk.mjs tests/test_capture_e2e.py fhir_server/README.md CLAUDE.md
++git commit -m "test(receiver): chunk round trip through the real server, and run guide"
++```
++
++- [ ] **Step 6: Browser check with the simulator (spec Acceptance 2), in real Chrome**
++
++Use a scratch database. Run the simulator for at least 60 s. Stop the server for about 15 s partway, while pending chunks grow, then restart it with the same database. Run a second capture, stop the server again, click Stop on the page, reload the tab with chunks pending, restart the server and paste the card again. Reload only after Stop: closing a tab mid-capture loses the unsaved partial chunk (up to 10 s), which is a known limit of this design.
++
++Pass means:
++- pending returns to 0 with no reload loop
++- the Encounter's Observations hold every sample with sequential indexes
++- no identifier appears twice
++- the plot and SIMULATED banner are visible
++- `note` says `SIMULATED`
++
++Write the query as a small script in the scratchpad, and report the counts.
++
++- [ ] **Step 7: Hardware smoke test (spec Acceptance 3), with the owner**
++
++The owner connects the **spare blank board** with a data cable. Confirm which board it is before writing anything. Flash `arduino/radar_json/radar_json.ino` with `arduino-cli`, with `USB CDC On Boot` enabled. The owner clicks Connect and picks the port, since the picker needs a click.
++
++Pass means lines reach the server as Observations. Report this as a data path check only, because the pins are placeholders and the values are not radar signal. If it cannot be run, report it as not done. Do not claim it passed.
+diff --git a/fhir_server/README.md b/fhir_server/README.md
+index 06746d0..9499cc1 100644
+--- a/fhir_server/README.md
++++ b/fhir_server/README.md
+@@ -27,20 +27,41 @@ root, from `tests/`, or as a direct script run.
+ 
+ `seed --reset` wipes and rebuilds the DB, then prints a JSON summary on its
+ **last stdout line**: `admin_password`, `doctor_password`, `patient_password`,
+ `device_token`, `org_id`, `location_id`, `practitioner_id`, `patient_id`,
+ `device_id`. (Passwords come from `FHIR_ADMIN_PASSWORD` / `FHIR_DOCTOR_PASSWORD`
+ / `FHIR_PATIENT_PASSWORD`, or are generated and printed once.)
+ 
+ If `FHIR_JWT_SECRET` is unset, `seed`/`serve` generate one and append it to
+ `.env` (process-local fallback if that file cannot be written).
+ 
++## Raw capture receiver (prototype)
++
++A browser page at `/capture/` reads the radar's JSON lines (from the simulator,
++or from the board over Web Serial in Chrome), cuts them into chunks of at most
++1000 samples and posts each chunk as a `raw-capture` Observation. Simulator
++runs are marked `SIMULATED`. Use a scratch database, and do not run
++`seed --reset` on a database you want to keep (it wipes it).
++
++```bash
++export FHIR_JWT_SECRET=<choose> FHIR_ADMIN_PASSWORD=<choose>
++export FHIR_DB_PATH=/tmp/capture-scratch.db      # or put --db <path> before the subcommand
++.venv/bin/python -m fhir_server seed --reset
++.venv/bin/python -m fhir_server capture-session --label S001   # prints a one-line JSON card
++.venv/bin/python -m fhir_server serve --port 8000
++```
++
++`--db` is a top-level option, so it goes before the subcommand:
++`python -m fhir_server --db /tmp/x.db capture-session --label S001`. The label
++takes 1 to 32 letters, digits or hyphens. Open `http://127.0.0.1:8000/capture/`
++in Chrome and paste the card. Node tests: `node --test "receiver/tests/*.test.js"`.
++
+ ## Endpoints
+ 
+ | Method + path | Auth | Purpose |
+ |---|---|---|
+ | `POST /auth/token` | none | `{username, password}` → `{access_token, token_type, expires_in}` |
+ | `GET /fhir-r4/v1/metadata` | none | CapabilityStatement (fhirVersion 4.0.1) |
+ | `POST /fhir-r4/v1/{Type}` | Bearer | create (201 + Location + ETag) |
+ | `GET /fhir-r4/v1/{Type}/{id}` | Bearer | read (200 + ETag) |
+ | `PUT /fhir-r4/v1/{Type}/{id}` | Bearer | full update (200 + ETag) |
+ | `DELETE /fhir-r4/v1/{Type}/{id}` | Bearer | delete (204; admin only) |
+diff --git a/fhir_server/app.py b/fhir_server/app.py
+index b43fa8c..d875694 100644
+--- a/fhir_server/app.py
++++ b/fhir_server/app.py
+@@ -1,37 +1,44 @@
+ import datetime as dt
++from pathlib import Path
+ 
+ from fastapi import FastAPI
+ from fastapi.responses import JSONResponse
++from fastapi.staticfiles import StaticFiles
+ 
+ from .config import Settings
+ from .routes import admin as admin_routes
+ from .routes import auth as auth_routes
+ from .routes import fhir as fhir_routes
+ from .services.fhir_service import SUPPORTED_PARAMS
+ 
++RECEIVER_DIR = Path(__file__).resolve().parent.parent / "receiver"
++
+ 
+ def capability_statement(settings) -> dict:
+     param_types = {
+         "identifier": "token", "name": "string", "birthdate": "date",
+         "gender": "token", "subject": "reference", "patient": "reference",
+         "encounter": "reference", "code": "token", "date": "date",
+         "status": "token", "participant": "reference",
+         "organization": "reference",
+     }
+     resources_out = [{
+         "type": rtype,
+         "interaction": [{"code": c} for c in
+                         ("read", "search-type", "create", "update", "delete")],
+         "searchParam": [{"code": p, "type": param_types.get(p, "token")}
+                         for p in sorted(params) if p != "id"],
+     } for rtype, params in SUPPORTED_PARAMS.items()]
++    for entry in resources_out:
++        if entry["type"] == "Observation":
++            entry["conditionalCreate"] = True
+     return {
+         "resourceType": "CapabilityStatement",
+         "status": "active",
+         "date": dt.datetime.now(dt.timezone.utc).strftime(
+             "%Y-%m-%dT%H:%M:%S+00:00"),
+         "kind": "instance",
+         "fhirVersion": "4.0.1",
+         "format": ["application/fhir+json", "application/json"],
+         "software": {"name": "PRATA FHIR server", "version": "0.1.0"},
+         "implementation": {
+@@ -59,11 +66,13 @@ def create_app(settings: Settings) -> FastAPI:
+     app.include_router(admin_routes.router)
+ 
+     # Registered before the FHIR router: GET /fhir-r4/v1/metadata must not be
+     # swallowed by GET /fhir-r4/v1/{type_} (pre-flight ordering ruling).
+     @app.get("/fhir-r4/v1/metadata")
+     def metadata():
+         return JSONResponse(content=capability_statement(settings),
+                             media_type="application/fhir+json")
+ 
+     app.include_router(fhir_routes.router)
++    app.mount("/capture", StaticFiles(directory=RECEIVER_DIR, html=True),
++              name="capture")
+     return app
+diff --git a/fhir_server/cli.py b/fhir_server/cli.py
+index 40612e4..bd2fe11 100644
+--- a/fhir_server/cli.py
++++ b/fhir_server/cli.py
+@@ -1,13 +1,14 @@
+ import argparse
+ import json
+ import os
++import re
+ import secrets
+ import sys
+ 
+ 
+ def _load_dotenv():
+     # isfile, not exists: the repo has a directory named .env/ (notes.env)
+     if os.path.isfile(".env"):
+         with open(".env") as f:
+             for line in f:
+                 line = line.strip()
+@@ -116,39 +117,135 @@ def cmd_seed(args):
+     print(json.dumps({
+         "admin_password": admin_password,
+         "doctor_password": doctor_password,
+         "patient_password": patient_password,
+         "device_token": device_token,
+         "org_id": org_id, "location_id": loc_id,
+         "practitioner_id": doc_id, "patient_id": pat_id, "device_id": dev_id,
+     }))
+ 
+ 
++def cmd_capture_session(args):
++    from datetime import datetime, timezone
++
++    from . import db as db_mod
++    from .auth.jwt import Principal
++    from .config import Settings
++    from .repositories import resources
++    from .services.fhir_service import FhirError, FhirService
++
++    label = args.label
++    if not re.fullmatch(r"[A-Za-z0-9-]{1,32}", label):
++        print("invalid label: use 1-32 letters, digits or hyphens",
++              file=sys.stderr)
++        sys.exit(2)
++    conn = db_mod.connect(args.db)
++    db_mod.init(conn)
++    first = {t: (resources.list(conn, t) or [None])[0]
++             for t in ("Organization", "Location", "Practitioner", "Device")}
++    if not all(first.values()):
++        print('database not seeded: run "seed" first', file=sys.stderr)
++        sys.exit(1)
++    org, loc, prac, dev = (first[t] for t in
++                           ("Organization", "Location", "Practitioner",
++                            "Device"))
++    svc = FhirService(conn, Settings.from_env(db_path=args.db))
++    admin = Principal(kind="admin")
++
++    patient = None
++    for _ in range(10):
++        nik = "9900" + "".join(secrets.choice("0123456789") for _ in range(12))
++        try:
++            _, patient, _ = svc.create(admin, "Patient", {
++                "resourceType": "Patient",
++                "identifier": [{"use": "official",
++                                "system": "https://fhir.kemkes.go.id/id/nik",
++                                "value": nik}],
++                "name": [{"use": "official", "text": f"Sesi {label}"}],
++                "gender": "male", "birthDate": "1990-01-01",
++                "multipleBirthBoolean": False,
++                "address": [{
++                    "use": "home", "line": ["Sesi capture"],
++                    "city": "Jakarta Pusat", "postalCode": "10110",
++                    "country": "ID",
++                    "extension": [{
++                        "url": "https://fhir.kemkes.go.id/r4/StructureDefinition/"
++                               "administrativeCode",
++                        "extension": [
++                            {"url": "province", "valueCode": "31"},
++                            {"url": "city", "valueCode": "3171"},
++                            {"url": "district", "valueCode": "317101"},
++                            {"url": "village", "valueCode": "317101001"},
++                            {"url": "rt", "valueCode": "001"},
++                            {"url": "rw", "valueCode": "001"}]}]}]})
++            break
++        except FhirError as exc:
++            if exc.status != 409:
++                raise
++    if patient is None:
++        print("could not allocate a unique synthetic NIK", file=sys.stderr)
++        sys.exit(1)
++
++    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
++    org_id = org["id"]
++    enc_doc = {
++        "resourceType": "Encounter",
++        "identifier": [{"use": "official",
++                        "system": f"http://sys-ids.kemkes.go.id/encounter/{org_id}",
++                        "value": f"capture-{label}-{secrets.token_hex(4)}"}],
++        "status": "arrived",
++        "statusHistory": [{"status": "arrived", "period": {"start": now}}],
++        "class": {"system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
++                  "code": "AMB", "display": "ambulatory"},
++        "subject": {"reference": f"Patient/{patient['id']}"},
++        "participant": [{"individual": {
++            "reference": f"Practitioner/{prac['id']}"}}],
++        "period": {"start": now},
++        "location": [{"location": {"reference": f"Location/{loc['id']}"}}],
++        "serviceProvider": {"reference": f"Organization/{org_id}"},
++    }
++    enc_id, enc, _ = svc.create(admin, "Encounter", enc_doc)
++    enc = dict(enc)
++    enc["status"] = "in-progress"
++    enc["statusHistory"] = list(enc["statusHistory"]) + [
++        {"status": "in-progress", "period": {"start": now}}]
++    svc.update(admin, "Encounter", enc_id, enc)
++
++    token = svc.provision_device(admin, dev["id"], f"Patient/{patient['id']}")
++    print(json.dumps({
++        "token": token, "patient": f"Patient/{patient['id']}",
++        "encounter": f"Encounter/{enc_id}", "device": f"Device/{dev['id']}",
++        "org": org_id, "label": label}))
++
++
+ def cmd_serve(args):
+     import uvicorn
+ 
+     from .app import create_app
+     from .config import Settings
+     uvicorn.run(create_app(Settings.from_env(db_path=args.db)),
+                 host="127.0.0.1", port=args.port)
+ 
+ 
+ def main(argv=None):
+     _load_dotenv()
+     _ensure_secret()
+     parser = argparse.ArgumentParser(prog="fhir_server")
+     parser.add_argument("--db",
+                         default=os.environ.get("FHIR_DB_PATH", "fhir_server.db"))
+     sub = parser.add_subparsers(dest="cmd", required=True)
+     sub.add_parser("init-db").set_defaults(fn=cmd_init_db)
+     seed = sub.add_parser("seed")
+     seed.add_argument("--reset", action="store_true")
+     seed.set_defaults(fn=cmd_seed)
++    cap = sub.add_parser("capture-session")
++    cap.add_argument("--label", required=True)
++    cap.set_defaults(fn=cmd_capture_session)
+     serve = sub.add_parser("serve")
+     serve.add_argument("--port", type=int, default=8000)
+     serve.set_defaults(fn=cmd_serve)
+     args = parser.parse_args(argv)
+     args.fn(args)
+ 
+ 
+ if __name__ == "__main__":
+     main()
+diff --git a/fhir_server/db.py b/fhir_server/db.py
+index 550db31..358b31d 100644
+--- a/fhir_server/db.py
++++ b/fhir_server/db.py
+@@ -6,20 +6,23 @@ CREATE TABLE IF NOT EXISTS resources (
+     json TEXT NOT NULL, created TEXT NOT NULL, updated TEXT NOT NULL,
+     PRIMARY KEY (type, id));
+ CREATE TABLE IF NOT EXISTS accounts (
+     id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE,
+     password_hash TEXT NOT NULL, role TEXT NOT NULL,
+     subject_ref TEXT, active INTEGER NOT NULL DEFAULT 1);
+ CREATE TABLE IF NOT EXISTS device_tokens (
+     id TEXT PRIMARY KEY, device_id TEXT NOT NULL, patient_id TEXT NOT NULL,
+     token_sha256 TEXT NOT NULL UNIQUE, created TEXT NOT NULL,
+     revoked INTEGER NOT NULL DEFAULT 0);
++CREATE TABLE IF NOT EXISTS conditional_keys (
++    type TEXT NOT NULL, identifier_value TEXT NOT NULL,
++    resource_id TEXT NOT NULL, PRIMARY KEY (type, identifier_value));
+ """
+ 
+ 
+ def connect(db_path: str) -> sqlite3.Connection:
+     # One shared connection for the app's single event loop; FastAPI serves
+     # routes on a different thread than create_app ran on, so pinning to the
+     # creating thread would raise ProgrammingError.
+     conn = sqlite3.connect(db_path, check_same_thread=False)
+     conn.row_factory = sqlite3.Row
+     conn.execute("PRAGMA foreign_keys = ON")
+diff --git a/fhir_server/routes/fhir.py b/fhir_server/routes/fhir.py
+index beef56a..48a9b4a 100644
+--- a/fhir_server/routes/fhir.py
++++ b/fhir_server/routes/fhir.py
+@@ -90,22 +90,30 @@ async def search(type_: str, request: Request):
+     except (FhirError, AuthzError) as exc:
+         return _error(exc)
+ 
+ 
+ @router.post("/{type_}")
+ async def create(type_: str, request: Request):
+     try:
+         _check_media(request)
+         _check_type(type_)
+         svc, principal = get_service(request), get_principal(request)
+-        rid, doc, version = svc.create(principal, type_,
+-                                       await _payload(request))
++        payload = await _payload(request)
++        cond = request.headers.get("If-None-Exist")
++        if cond is not None:
++            rid, doc, created = svc.conditional_create(principal, type_,
++                                                       payload, cond)
++            version = res.get_version(svc.conn, type_, rid) or 1
++            return _json(doc, status=201 if created else 200, headers={
++                "Location": f"/fhir-r4/v1/{type_}/{rid}",
++                "ETag": f'W/"{version}"'})
++        rid, doc, version = svc.create(principal, type_, payload)
+         return _json(doc, status=201, headers={
+             "Location": f"/fhir-r4/v1/{type_}/{rid}",
+             "ETag": f'W/"{version}"'})
+     except (FhirError, AuthzError) as exc:
+         return _error(exc)
+ 
+ 
+ @router.get("/{type_}/{rid}")
+ async def read(type_: str, rid: str, request: Request):
+     try:
+diff --git a/fhir_server/services/fhir_service.py b/fhir_server/services/fhir_service.py
+index df797b2..e0a66b7 100644
+--- a/fhir_server/services/fhir_service.py
++++ b/fhir_server/services/fhir_service.py
+@@ -156,20 +156,80 @@ class FhirService:
+         if resource_type == "Encounter":
+             doc = _ensure_participant(doc, principal)
+         if res.exists(self.conn, resource_type, new_id):
+             raise FhirError([Issue(
+                 code="duplicate",
+                 details_text=f"Id collision: {resource_type}/{new_id}"
+                              " already exists (refusing to overwrite)")], 409)
+         res.put(self.conn, resource_type, new_id, doc)
+         return new_id, res.get(self.conn, resource_type, new_id), 1
+ 
++    @staticmethod
++    def _parse_if_none_exist(header):
++        def bad(msg):
++            return FhirError([Issue(code="value", details_text=msg,
++                                    expression="If-None-Exist")], 400)
++        parts = (header or "").split("&")
++        if len(parts) != 1 or not parts[0].startswith("identifier="):
++            raise bad("If-None-Exist must be exactly one identifier=value"
++                      " parameter")
++        raw = parts[0][len("identifier="):]
++        value = raw.partition("|")[2] if "|" in raw else raw
++        if not value:
++            raise bad("If-None-Exist identifier value is empty")
++        return value
++
++    def conditional_create(self, principal, resource_type, payload,
++                           if_none_exist):
++        """Observation retry-safe create keyed on identifier.value.
++        Returns (id, doc, created)."""
++        value = self._parse_if_none_exist(if_none_exist)
++        if resource_type != "Observation":
++            raise FhirError([Issue(
++                code="not-supported",
++                details_text="Conditional create is supported for Observation"
++                             " only", expression="If-None-Exist")], 400)
++        idents = payload.get("identifier") if isinstance(payload, dict) else None
++        if not isinstance(idents, list) or not any(
++                isinstance(i, dict) and i.get("value") == value
++                for i in idents):
++            raise FhirError([Issue(
++                code="value",
++                details_text="If-None-Exist identifier value must equal an"
++                             " identifier.value in the payload",
++                expression="If-None-Exist")], 400)
++        row = self.conn.execute(
++            "SELECT resource_id FROM conditional_keys"
++            " WHERE type=? AND identifier_value=?",
++            (resource_type, value)).fetchone()
++        if row is not None:
++            existing = res.get(self.conn, resource_type, row["resource_id"])
++            if existing is not None:
++                # authorize against the stored row, before validation, so a
++                # retry still succeeds after the Encounter has finished
++                try:
++                    authz.check(principal, "read", resource_type, existing,
++                                conn=self.conn)
++                except AuthzError as exc:
++                    raise _as_fhir_error(exc) from exc
++                return row["resource_id"], existing, False
++            self.conn.execute(
++                "DELETE FROM conditional_keys WHERE type=? AND"
++                " identifier_value=?", (resource_type, value))
++            self.conn.commit()
++        new_id, doc, _ = self.create(principal, resource_type, payload)
++        self.conn.execute(
++            "INSERT INTO conditional_keys VALUES (?,?,?)",
++            (resource_type, value, new_id))
++        self.conn.commit()
++        return new_id, doc, True
++
+     def read(self, principal, resource_type, id_):
+         doc = res.get(self.conn, resource_type, id_)
+         if doc is None:
+             raise FhirError([Issue(code="not-found",
+                                    details_text=f"{resource_type}/{id_} not found")],
+                             404)
+         try:
+             authz.check(principal, "read", resource_type, doc, conn=self.conn)
+         except AuthzError as exc:
+             raise _as_fhir_error(exc) from exc
+diff --git a/fhir_server/validation/rules_common.py b/fhir_server/validation/rules_common.py
+index c8b0b28..2740214 100644
+--- a/fhir_server/validation/rules_common.py
++++ b/fhir_server/validation/rules_common.py
+@@ -1,19 +1,20 @@
+ import datetime as dt
+ import re
+ 
+ from .issues import (Issue, R_DATETIME, R_EMPTY_TEXT, R_BAD_CODING_SYSTEM,
+                      R_MISSING_REFERENCE, L_EARLIEST_DATE,
+                      L_UNRESOLVABLE_REFERENCE)
+ 
+ ALLOWED_SYSTEMS = {
+     "http://loinc.org",
++    "urn:prata:radar-signal",
+     "http://unitsofmeasure.org",
+     "http://hl7.org/fhir/administrative-gender",
+     "http://hl7.org/fhir/observation-status",
+     "http://hl7.org/fhir/encounter-status",
+     "http://hl7.org/fhir/location-status",
+     "http://hl7.org/fhir/device-status",
+     "http://hl7.org/fhir/identifier-use",
+     "http://hl7.org/fhir/name-use",
+     "http://hl7.org/fhir/address-use",
+     "http://hl7.org/fhir/address-type",
+diff --git a/fhir_server/validation/rules_observation.py b/fhir_server/validation/rules_observation.py
+index 8343487..1b30ed8 100644
+--- a/fhir_server/validation/rules_observation.py
++++ b/fhir_server/validation/rules_observation.py
+@@ -1,40 +1,45 @@
++import re
++
+ from .issues import (Issue, R_WAJIB_MISSING, R_CODE_NOT_FOUND,
+                      R_BAD_IDENTIFIER_SYSTEM, L_OBSERVATION_VALUE,
+                      L_DEVICE_RULE)
+ 
+ 
+ def _wajib(text, expr):
+     return Issue(code="value", details_text=f"Wajib element missing: {text}",
+                  expression=expr, rule_number=R_WAJIB_MISSING)
+ 
+ 
+-def validate_observation(payload, *, org_id, device_ref, assigned_patient,
+-                         encounter_getter=None):
++RAW_SYSTEM = "urn:prata:radar-signal"
++RAW_CODE = "raw-capture"
++RAW_MAX_SAMPLES = 1000
++RAW_COMPONENT_CODES = {"i-voltage", "q-voltage", "accel-x", "accel-y", "accel-z",
++                       "gyro-x", "gyro-y", "gyro-z"}
++_TOKEN_RE = re.compile(r"^-?\d+(\.\d+)?([eE][+-]?\d+)?$")
++_ERROR_TOKENS = {"E", "L", "U"}
++
++
++def _raw_issue(text, expr):
++    return Issue(code="value", details_text=text, expression=expr,
++                 rule_number=L_OBSERVATION_VALUE)
++
++
++def _heart_rate_rules(payload, c0):
+     out = []
+-    if not payload.get("status"):
+-        out.append(_wajib("Observation.status", "Observation.status"))
+-    codings = (payload.get("code") or {}).get("coding") or []
+-    if not codings:
+-        out.append(_wajib("Observation.code.coding", "Observation.code.coding"))
+-    else:
+-        c0 = codings[0]
+-        if c0.get("system") != "http://loinc.org" or c0.get("code") != "8867-4":
+-            out.append(Issue(code="value",
+-                             details_text=f"Code not found: '{c0.get('code')}' in system:"
+-                                          " http://loinc.org (heart-rate slice)",
+-                             expression="Observation.code.coding[0]",
+-                             rule_number=R_CODE_NOT_FOUND))
+-    if not (payload.get("subject") or {}).get("reference"):
+-        out.append(_wajib("Observation.subject", "Observation.subject"))
+-    if not (payload.get("encounter") or {}).get("reference"):
+-        out.append(_wajib("Observation.encounter", "Observation.encounter"))
++    if c0 is not None and (c0.get("system") != "http://loinc.org"
++                           or c0.get("code") != "8867-4"):
++        out.append(Issue(code="value",
++                         details_text=f"Code not found: '{c0.get('code')}' in system:"
++                                      " http://loinc.org (heart-rate slice)",
++                         expression="Observation.code.coding[0]",
++                         rule_number=R_CODE_NOT_FOUND))
+     categories = payload.get("category") or []
+     cat_codings = categories[0].get("coding") or [] if categories else []
+     if cat_codings and not any(
+             c.get("system") == "http://terminology.hl7.org/CodeSystem/observation-category"
+             and c.get("code") == "vital-signs" for c in cat_codings):
+         out.append(Issue(code="value",
+                          details_text="Category must include observation-category | vital-signs",
+                          expression="Observation.category[0].coding",
+                          rule_number=R_CODE_NOT_FOUND))
+     vq = payload.get("valueQuantity")
+@@ -52,20 +57,113 @@ def validate_observation(payload, *, org_id, device_ref, assigned_patient,
+         if isinstance(val, bool) or not isinstance(val, (int, float)):
+             out.append(Issue(code="value",
+                              details_text="valueQuantity.value must be numeric",
+                              expression="Observation.valueQuantity.value",
+                              rule_number=L_OBSERVATION_VALUE))
+         elif not 0 < val < 300:
+             out.append(Issue(code="value",
+                              details_text="Heart rate out of range (0,300)",
+                              expression="Observation.valueQuantity.value",
+                              rule_number=L_OBSERVATION_VALUE))
++    return out
++
++
++def _raw_capture_rules(payload):
++    out = []
++    if "valueQuantity" in payload or any(
++            k.startswith("value") for k in payload):
++        out.append(_raw_issue("Raw capture chunk must not carry a top-level value[x]",
++                              "Observation.value"))
++    idents = payload.get("identifier") or []
++    if len(idents) != 1:
++        out.append(_raw_issue("Raw capture chunk needs exactly one identifier",
++                              "Observation.identifier"))
++    for idx, ident in enumerate(idents):
++        if not ident.get("value"):
++            out.append(_raw_issue("identifier.value is required",
++                                  f"Observation.identifier[{idx}].value"))
++    seen = set()
++    periods = set()
++    counts = set()
++    comps = payload.get("component") or []
++    for idx, comp in enumerate(comps):
++        base = f"Observation.component[{idx}]"
++        ccodings = (comp.get("code") or {}).get("coding") or []
++        cc = ccodings[0] if ccodings else {}
++        code = cc.get("code")
++        if cc.get("system") != RAW_SYSTEM or code not in RAW_COMPONENT_CODES:
++            out.append(_raw_issue(f"Unknown raw component code: '{code}'",
++                                  f"{base}.code"))
++        elif code in seen:
++            out.append(_raw_issue(f"Duplicate raw component code: '{code}'",
++                                  f"{base}.code"))
++        else:
++            seen.add(code)
++        sd = comp.get("valueSampledData")
++        if not isinstance(sd, dict):
++            out.append(_raw_issue("Raw component must use valueSampledData",
++                                  f"{base}.valueSampledData"))
++            continue
++        if sd.get("dimensions") != 1 or isinstance(sd.get("dimensions"), bool):
++            out.append(_raw_issue("valueSampledData.dimensions must be 1",
++                                  f"{base}.valueSampledData.dimensions"))
++        period = sd.get("period")
++        if isinstance(period, bool) or not isinstance(period, (int, float)) or period <= 0:
++            out.append(_raw_issue("valueSampledData.period must be > 0",
++                                  f"{base}.valueSampledData.period"))
++        else:
++            periods.add(period)
++        data = sd.get("data")
++        tokens = data.split() if isinstance(data, str) else []
++        if not tokens:
++            out.append(_raw_issue("valueSampledData.data must not be empty",
++                                  f"{base}.valueSampledData.data"))
++            continue
++        counts.add(len(tokens))
++        if len(tokens) > RAW_MAX_SAMPLES:
++            out.append(_raw_issue(f"At most {RAW_MAX_SAMPLES} samples per chunk",
++                                  f"{base}.valueSampledData.data"))
++        bad = next((t for t in tokens
++                    if t not in _ERROR_TOKENS and not _TOKEN_RE.match(t)), None)
++        if bad is not None:
++            out.append(_raw_issue(f"Invalid data token: '{bad}'",
++                                  f"{base}.valueSampledData.data"))
++    for need in ("i-voltage", "q-voltage"):
++        if need not in seen:
++            out.append(_raw_issue(f"Raw capture requires component '{need}'",
++                                  "Observation.component"))
++    if len(periods) > 1:
++        out.append(_raw_issue("All components must share one period",
++                              "Observation.component"))
++    if len(counts) > 1:
++        out.append(_raw_issue("All components must have the same sample count",
++                              "Observation.component"))
++    return out
++
++
++def validate_observation(payload, *, org_id, device_ref, assigned_patient,
++                         encounter_getter=None):
++    out = []
++    if not payload.get("status"):
++        out.append(_wajib("Observation.status", "Observation.status"))
++    codings = (payload.get("code") or {}).get("coding") or []
++    c0 = codings[0] if codings else None
++    if c0 is None:
++        out.append(_wajib("Observation.code.coding", "Observation.code.coding"))
++    if (c0 or {}).get("system") == RAW_SYSTEM and c0.get("code") == RAW_CODE:
++        out.extend(_raw_capture_rules(payload))
++    else:
++        out.extend(_heart_rate_rules(payload, c0))
++    if not (payload.get("subject") or {}).get("reference"):
++        out.append(_wajib("Observation.subject", "Observation.subject"))
++    if not (payload.get("encounter") or {}).get("reference"):
++        out.append(_wajib("Observation.encounter", "Observation.encounter"))
+     dev = (payload.get("device") or {}).get("reference")
+     if device_ref is not None and dev != device_ref:
+         out.append(Issue(code="value",
+                          details_text=f"Observation.device must be {device_ref}",
+                          expression="Observation.device", rule_number=L_DEVICE_RULE))
+     subj = (payload.get("subject") or {}).get("reference")
+     if assigned_patient is not None and subj != assigned_patient:
+         out.append(Issue(code="value",
+                          details_text=f"Device assigned to {assigned_patient}, not {subj}",
+                          expression="Observation.subject", rule_number=L_DEVICE_RULE))
+diff --git a/receiver/app.js b/receiver/app.js
+new file mode 100644
+index 0000000..f59ea06
+--- /dev/null
++++ b/receiver/app.js
+@@ -0,0 +1,145 @@
++// Page wiring only. Logic lives in src/.
++import { parseCard } from "./src/card.js";
++import { Outbox, IndexedDbStore, sessionKey } from "./src/outbox.js";
++import { Uploader } from "./src/uploader.js";
++import { Capture } from "./src/capture.js";
++import { simulatorLines } from "./src/simulator.js";
++import { serialLines } from "./src/serial.js";
++import { Trace, draw } from "./src/plot.js";
++import { coalesce } from "./src/coalesce.js";
++
++const $ = (id) => document.getElementById(id);
++const outbox = new Outbox(new IndexedDbStore());
++const trace = new Trace();
++
++let card = null;
++let uploader = null;
++let abort = null;
++let stats = { samples: 0, gaps: 0, rejected: 0 };
++let up = { confirmed: 0, lastRejectedReason: null, state: "idle" };
++let counts = { pending: 0, rejected: 0, otherSession: 0 };
++let running = false;
++
++const showError = (msg) => { $("error").textContent = msg; };
++
++async function refresh() {
++  if (card) {
++    try { counts = await outbox.counts(sessionKey(card)); } catch (e) { showError(`Storage error: ${e.message}`); }
++  }
++  $("status").textContent =
++    `Samples ${stats.samples} | Chunks confirmed ${up.confirmed} | Chunks pending ${counts.pending} | ` +
++    `Gaps ${stats.gaps} | Rejected lines ${stats.rejected}`;
++  const notes = [];
++  if (counts.rejected > 0) {
++    notes.push(`${counts.rejected} chunks rejected by the server` +
++      (up.lastRejectedReason ? `; latest reason: ${up.lastRejectedReason}` : "") + ".");
++  }
++  if (counts.otherSession > 0) {
++    notes.push(`${counts.otherSession} chunks belong to another session. Paste that session's card to send them.`);
++  }
++  $("notes").textContent = notes.join(" ");
++}
++
++// At most ~4 refreshes a second and never two at once: counts() clones the whole outbox.
++const scheduleRefresh = coalesce(refresh, 250);
++
++function onUploadStatus(s) {
++  up = s;
++  if (s.state === "auth") showError("Token invalid. Paste a new card.");
++  scheduleRefresh();
++}
++
++function setRunning(on, simulated = false) {
++  running = on;
++  $("stop").disabled = !on;
++  $("connect").disabled = on || !navigator.serial;
++  $("simulate").disabled = on;
++  $("simulated").hidden = !(on && simulated);
++}
++
++function useCard() {
++  showError("");
++  let parsed;
++  try {
++    parsed = parseCard($("card").value);
++  } catch (e) {
++    showError(e.message);
++    return;
++  }
++  card = parsed;
++  try { sessionStorage.setItem("prata-card", $("card").value); } catch { /* storage unavailable */ }
++  $("card-label").textContent = `Using card: ${card.label}`;
++  if (uploader) uploader.resume(card);
++  else {
++    uploader = new Uploader({ outbox, fetchFn: (...a) => fetch(...a), card, onStatus: onUploadStatus });
++    uploader.start();
++  }
++  scheduleRefresh();
++}
++
++async function startCapture(kind) {
++  showError("");
++  if (!card) { showError("Paste the session card and click Use card first."); return; }
++  abort = new AbortController();
++  const { signal } = abort;
++  let lines;
++  if (kind === "sim") {
++    lines = simulatorLines({ signal });
++  } else {
++    try {
++      const port = await navigator.serial.requestPort();
++      lines = serialLines(port, { signal });
++    } catch (e) {
++      showError(`Could not open serial port: ${e.message}`);
++      return;
++    }
++  }
++  const capture = new Capture({
++    outbox, sessionKey: sessionKey(card), card,
++    source: kind === "sim" ? "SIMULATED" : "serial",
++    onSample: (s) => { trace.push(s.I, s.Q); draw($("plot"), trace); },
++    onStatus: (st) => { stats = st; scheduleRefresh(); },
++  });
++  setRunning(true, kind === "sim");
++  try {
++    const result = await capture.run(lines);
++    if (result === "disconnected") showError("Disconnected. Click Connect to resume.");
++    else if (result === "quota") {
++      showError("Browser storage is full. Capture stopped. The unsaved partial chunk was lost.");
++    }
++  } catch (e) {
++    showError(`Capture failed: ${e.message}`);
++  } finally {
++    abort = null;
++    setRunning(false);
++    scheduleRefresh();
++  }
++}
++
++$("use-card").addEventListener("click", useCard);
++$("connect").addEventListener("click", () => startCapture("serial"));
++$("simulate").addEventListener("click", () => startCapture("sim"));
++$("stop").addEventListener("click", () => { abort?.abort(); });
++
++if (!navigator.serial) {
++  $("connect").disabled = true;
++  $("connect").title = "This browser has no Web Serial. Use Chrome or Edge.";
++  showError("This browser has no Web Serial. Use Chrome or Edge.");
++}
++
++try {
++  const saved = sessionStorage.getItem("prata-card");
++  if (saved) { $("card").value = saved; useCard(); }
++} catch { /* storage unavailable */ }
++
++// Chunks left from an earlier load are reported; they upload once a card is set.
++(async () => {
++  try {
++    const rows = await outbox.store.all();
++    if (rows.length > 0 && !card) {
++      $("notes").textContent = `${rows.length} chunks are waiting from an earlier session. Paste a card to send them.`;
++    }
++  } catch (e) {
++    showError(`Storage error: ${e.message}`);
++  }
++})();
+diff --git a/receiver/index.html b/receiver/index.html
+new file mode 100644
+index 0000000..67710ed
+--- /dev/null
++++ b/receiver/index.html
+@@ -0,0 +1,41 @@
++<!doctype html>
++<html lang="en">
++<head>
++<meta charset="utf-8">
++<meta name="viewport" content="width=device-width, initial-scale=1">
++<title>Raw signal capture</title>
++<style>
++  body { font-family: system-ui, sans-serif; max-width: 52rem; margin: 1rem auto; padding: 0 1rem; }
++  textarea { width: 100%; height: 6rem; font-family: monospace; }
++  canvas { width: 100%; height: 200px; border: 1px solid #888; background: #fafafa; }
++  #simulated { background: #b00020; color: #fff; font-size: 2rem; font-weight: bold; text-align: center; padding: .5rem; margin: .5rem 0; }
++  #error { color: #b00020; font-weight: bold; min-height: 1.5rem; }
++  #notes { color: #444; }
++  [hidden] { display: none !important; }
++</style>
++</head>
++<body>
++<h1>Raw signal capture</h1>
++<p><strong>Raw signal only. Not a measurement result or a clinical finding.</strong></p>
++
++<section>
++  <label for="card">Session card</label>
++  <textarea id="card" spellcheck="false"></textarea>
++  <button id="use-card">Use card</button>
++  <span id="card-label"></span>
++</section>
++
++<section>
++  <button id="connect">Connect serial</button>
++  <button id="simulate">Start simulator</button>
++  <button id="stop" disabled>Stop</button>
++</section>
++
++<div id="simulated" hidden>SIMULATED</div>
++<canvas id="plot" width="1000" height="200"></canvas>
++<p id="status">Samples 0 | Chunks confirmed 0 | Chunks pending 0 | Gaps 0 | Rejected lines 0</p>
++<p id="notes"></p>
++<p id="error" role="alert"></p>
++<script type="module" src="app.js"></script>
++</body>
++</html>
+diff --git a/receiver/package.json b/receiver/package.json
+new file mode 100644
+index 0000000..f845285
+--- /dev/null
++++ b/receiver/package.json
+@@ -0,0 +1 @@
++{"private":true,"type":"module"}
+diff --git a/receiver/src/capture.js b/receiver/src/capture.js
+new file mode 100644
+index 0000000..98166ab
+--- /dev/null
++++ b/receiver/src/capture.js
+@@ -0,0 +1,97 @@
++// Capture controller: serial/simulated lines -> samples -> chunks -> outbox.
++// Stop is done by the caller ending the line source.
++import { parseLine } from "./jsonlines.js";
++import { Chunker } from "./chunker.js";
++import { buildObservation, identifierValue } from "./observation.js";
++
++const MAX_FILL = 999; // mirrors Chunker: a larger gap starts a new segment
++
++const isQuota = (e) => e?.name === "QuotaExceededError";
++
++export class Capture {
++  constructor({ outbox, sessionKey, card, source, onSample, onStatus, newId = () => "cap-" + crypto.randomUUID() }) {
++    Object.assign(this, { outbox, sessionKey, card, source, onSample, onStatus, newId });
++    this.stats = { samples: 0, gaps: 0, rejected: 0 };
++  }
++
++  _emit() {
++    this.onStatus?.({ ...this.stats });
++  }
++
++  async run(lines) {
++    const captureId = this.newId();
++    this.stats = { samples: 0, gaps: 0, rejected: 0 };
++    let failure = null;
++    let chain = Promise.resolve();
++    const chunker = new Chunker({
++      onChunk: (chunk) => {
++        chain = chain.then(async () => {
++          if (failure) return;
++          try {
++            await this.outbox.add({
++              identifier: identifierValue(captureId, chunk),
++              sessionKey: this.sessionKey,
++              observation: buildObservation(chunk, this.card, { captureId, source: this.source }),
++            });
++          } catch (e) {
++            failure = e;
++          }
++        });
++      },
++    });
++
++    let result = "ended";
++    let lastIdx = null;
++    let lastFs = null;
++    let procError = null;
++    let finished = false;
++    const it = lines[Symbol.asyncIterator]();
++    // Only a failure of the line source itself counts as a disconnect.
++    for (;;) {
++      let step;
++      try {
++        step = await it.next();
++      } catch {
++        result = "disconnected";
++        finished = true;
++        break;
++      }
++      if (step.done) { finished = true; break; }
++      try {
++        const r = parseLine(step.value);
++        if (r.kind === "sample") {
++          const s = r.sample;
++          if (lastIdx !== null && s.fs === lastFs) {
++            const gap = s.sampleIdx - lastIdx - 1;
++            if (gap > 0 && gap <= MAX_FILL) this.stats.gaps += gap;
++          }
++          lastIdx = s.sampleIdx;
++          lastFs = s.fs;
++          this.stats.samples += 1;
++          chunker.addSample(s);
++          this.onSample?.(s);
++          this._emit();
++        } else if (r.kind === "rejected") {
++          this.stats.rejected += 1;
++          chunker.noteRejected();
++          this._emit();
++        }
++      } catch (e) {
++        procError = e;
++        break;
++      }
++      if (failure) break;
++    }
++    if (!finished) {
++      try { await it.return?.(); } catch { /* source cleanup failure is not actionable */ }
++    }
++    if (!failure) chunker.flush();
++    await chain;
++    if (procError) throw procError;
++    if (failure) {
++      if (isQuota(failure)) return "quota";
++      throw failure;
++    }
++    return result;
++  }
++}
+diff --git a/receiver/src/card.js b/receiver/src/card.js
+new file mode 100644
+index 0000000..db8c6c9
+--- /dev/null
++++ b/receiver/src/card.js
+@@ -0,0 +1,32 @@
++// Parse the session card printed by the server's capture-session command.
++
++const REQUIRED = ["token", "patient", "encounter", "device", "org", "label"];
++const PREFIXES = { patient: "Patient/", encounter: "Encounter/", device: "Device/" };
++
++export function parseCard(text) {
++  if (typeof text !== "string" || text.trim() === "") {
++    throw new Error("Paste the session card printed by the server first.");
++  }
++  let card;
++  try {
++    card = JSON.parse(text);
++  } catch {
++    throw new Error("The session card is not valid JSON.");
++  }
++  if (card === null || typeof card !== "object" || Array.isArray(card)) {
++    throw new Error("The session card must be a JSON object.");
++  }
++  for (const f of REQUIRED) {
++    if (!(f in card)) throw new Error(`Session card is missing field ${f}.`);
++    if (typeof card[f] !== "string" || card[f] === "") {
++      throw new Error(`Session card field ${f} must be a non-empty string.`);
++    }
++  }
++  for (const [f, prefix] of Object.entries(PREFIXES)) {
++    if (!card[f].startsWith(prefix) || card[f].length === prefix.length) {
++      throw new Error(`Session card field ${f} must start with ${prefix}`);
++    }
++  }
++  const { token, patient, encounter, device, org, label } = card;
++  return { token, patient, encounter, device, org, label };
++}
+diff --git a/receiver/src/chunker.js b/receiver/src/chunker.js
+new file mode 100644
+index 0000000..b00e982
+--- /dev/null
++++ b/receiver/src/chunker.js
+@@ -0,0 +1,88 @@
++// Group samples into chunks of at most chunkSize entries per channel.
++// A gap inside a chunk is filled with "E" so the sample clock stays regular.
++// Plain ES module: runs unchanged in the browser and in Node.
++
++export const CHANNELS = ["I", "Q", "ax", "ay", "az", "gx", "gy", "gz"];
++const MAX_FILL = 999; // a larger gap starts a new segment
++
++export class Chunker {
++  constructor({ chunkSize = 1000, now = Date.now, onChunk } = {}) {
++    this.chunkSize = chunkSize;
++    this.now = now;
++    this.onChunk = onChunk;
++    this.segment = 0;
++    this.chunkIndex = 0;
++    this.lastIdx = null;
++    this.fs = null;
++    this.pendingRejected = 0;
++    this.deviceMissed = 0;
++    this._reset();
++  }
++
++  _reset() {
++    this.channels = Object.fromEntries(CHANNELS.map((c) => [c, []]));
++    this.gapSamples = 0;
++    this.startTimeMs = null;
++  }
++
++  noteRejected() {
++    this.pendingRejected += 1;
++  }
++
++  // `remaining` = fill entries still to add before the current real sample,
++  // counting the entry being added now when it is a fill.
++  _begin(remaining) {
++    if (this.startTimeMs === null) {
++      this.startTimeMs = this.now() - remaining * (1000 / this.fs);
++    }
++  }
++
++  _emitIfFull() {
++    if (this.channels.I.length >= this.chunkSize) this.flush();
++  }
++
++  addSample(sample) {
++    if (this.lastIdx !== null) {
++      const gap = sample.sampleIdx - this.lastIdx - 1;
++      if (gap < 0 || gap > MAX_FILL || sample.fs !== this.fs) {
++        this.flush();
++        this.segment += 1;
++        this.chunkIndex = 0;
++        this.lastIdx = null;
++      }
++    }
++    this.fs = sample.fs;
++    this.deviceMissed = sample.missed;
++    if (this.lastIdx !== null) {
++      const gap = sample.sampleIdx - this.lastIdx - 1;
++      for (let i = 0; i < gap; i++) {
++        this._begin(gap - i);
++        for (const c of CHANNELS) this.channels[c].push("E");
++        this.gapSamples += 1;
++        this._emitIfFull();
++      }
++    }
++    this._begin(0);
++    for (const c of CHANNELS) this.channels[c].push(sample[c]);
++    this.lastIdx = sample.sampleIdx;
++    this._emitIfFull();
++  }
++
++  flush() {
++    if (this.channels.I.length === 0) return;
++    const chunk = {
++      segment: this.segment,
++      chunkIndex: this.chunkIndex,
++      fs: this.fs,
++      startTimeMs: this.startTimeMs,
++      channels: this.channels,
++      gapSamples: this.gapSamples,
++      rejectedLines: this.pendingRejected,
++      deviceMissed: this.deviceMissed,
++    };
++    this.chunkIndex += 1;
++    this.pendingRejected = 0;
++    this._reset();
++    this.onChunk(chunk);
++  }
++}
+diff --git a/receiver/src/coalesce.js b/receiver/src/coalesce.js
+new file mode 100644
+index 0000000..1d915af
+--- /dev/null
++++ b/receiver/src/coalesce.js
+@@ -0,0 +1,21 @@
++// Returns schedule(): runs async fn at most once per ms, never two at once.
++// Calls made while a run or timer is pending collapse into one later run.
++export function coalesce(fn, ms, { setTimer = setTimeout } = {}) {
++  let timer = null;
++  let running = false;
++  let dirty = false;
++  const arm = () => {
++    if (timer !== null || running) return;
++    timer = setTimer(fire, ms);
++  };
++  async function fire() {
++    timer = null;
++    running = true;
++    dirty = false;
++    try { await fn(); } finally {
++      running = false;
++      if (dirty) arm();
++    }
++  }
++  return () => { dirty = true; arm(); };
++}
+diff --git a/receiver/src/jsonlines.js b/receiver/src/jsonlines.js
+new file mode 100644
+index 0000000..163eac8
+--- /dev/null
++++ b/receiver/src/jsonlines.js
+@@ -0,0 +1,68 @@
++// Parse the newline-delimited JSON the radar_json firmware prints on serial.
++// Plain ES module: runs unchanged in the browser and in Node.
++
++export const FIELDS = [
++  "epoch_id", "sample_idx", "t_host_unix", "fs", "crc_ok", "missed",
++  "I", "Q", "ax", "ay", "az", "gx", "gy", "gz",
++];
++const INT_FIELDS = ["epoch_id", "sample_idx", "fs", "missed"];
++const NUM_FIELDS = ["t_host_unix", "I", "Q", "ax", "ay", "az", "gx", "gy", "gz"];
++
++const MAX_LINE = 4096;
++
++const rejected = (reason) => ({ kind: "rejected", reason });
++
++export function parseLine(line) {
++  const text = String(line).trim();
++  if (!text.startsWith("{")) return { kind: "ignored" };
++  let p;
++  try {
++    p = JSON.parse(text);
++  } catch {
++    return rejected("invalid JSON");
++  }
++  if (p === null || typeof p !== "object" || Array.isArray(p)) {
++    return rejected("packet must be a JSON object");
++  }
++  for (const f of FIELDS) {
++    if (!(f in p)) return rejected(`missing field ${f}`);
++  }
++  for (const f of INT_FIELDS) {
++    if (!Number.isInteger(p[f])) return rejected(`field ${f} must be an integer`);
++  }
++  if (typeof p.crc_ok !== "boolean") return rejected("field crc_ok must be boolean");
++  for (const f of NUM_FIELDS) {
++    if (typeof p[f] !== "number" || !Number.isFinite(p[f])) {
++      return rejected(`field ${f} must be a finite number`);
++    }
++  }
++  if (p.sample_idx < 0) return rejected("sample_idx must be >= 0");
++  if (p.fs <= 0) return rejected("fs must be > 0");
++  if (!p.crc_ok) return rejected("crc_ok is false");
++  return {
++    kind: "sample",
++    sample: {
++      sampleIdx: p.sample_idx, fs: p.fs, missed: p.missed,
++      I: p.I, Q: p.Q, ax: p.ax, ay: p.ay, az: p.az, gx: p.gx, gy: p.gy, gz: p.gz,
++    },
++  };
++}
++
++// Reassembles lines from arbitrary text chunks (serial reads split anywhere).
++export class LineSplitter {
++  constructor() {
++    this.buf = "";
++  }
++
++  push(text) {
++    this.buf += text;
++    const parts = this.buf.split("\n");
++    this.buf = parts.pop();
++    const out = parts.map((l) => (l.endsWith("\r") ? l.slice(0, -1) : l));
++    if (this.buf.length > MAX_LINE) {
++      out.push(this.buf);
++      this.buf = "";
++    }
++    return out;
++  }
++}
+diff --git a/receiver/src/observation.js b/receiver/src/observation.js
+new file mode 100644
+index 0000000..9c972aa
+--- /dev/null
++++ b/receiver/src/observation.js
+@@ -0,0 +1,53 @@
++// Build the FHIR R4 raw-capture Observation for one chunk.
++// Numbers use JavaScript number-to-string; "E" marks a filled gap.
++
++const SYSTEM = "urn:prata:radar-signal";
++const UCUM = "http://unitsofmeasure.org";
++
++const COMPONENTS = [
++  ["I", "i-voltage", "V"], ["Q", "q-voltage", "V"],
++  ["ax", "accel-x", "[g]"], ["ay", "accel-y", "[g]"], ["az", "accel-z", "[g]"],
++  ["gx", "gyro-x", "deg/s"], ["gy", "gyro-y", "deg/s"], ["gz", "gyro-z", "deg/s"],
++];
++
++export function identifierValue(captureId, chunk) {
++  return `${captureId}-${chunk.segment}-${chunk.chunkIndex}`;
++}
++
++function isoSeconds(ms) {
++  return new Date(Math.floor(ms / 1000) * 1000).toISOString().replace(/\.\d+Z$/, "+00:00");
++}
++
++export function buildObservation(chunk, card, { captureId, source }) {
++  const period = 1000 / chunk.fs;
++  return {
++    resourceType: "Observation",
++    status: "final",
++    identifier: [{
++      system: `http://sys-ids.kemkes.go.id/organization/${card.org}`,
++      value: identifierValue(captureId, chunk),
++    }],
++    code: { coding: [{ system: SYSTEM, code: "raw-capture", display: "Raw radar I/Q capture" }] },
++    subject: { reference: card.patient },
++    encounter: { reference: card.encounter },
++    device: { reference: card.device },
++    effectiveDateTime: isoSeconds(chunk.startTimeMs),
++    note: [{
++      text: JSON.stringify({
++        source,
++        gap_samples: chunk.gapSamples,
++        rejected_lines: chunk.rejectedLines,
++        device_missed: chunk.deviceMissed,
++      }),
++    }],
++    component: COMPONENTS.map(([ch, code, unit]) => ({
++      code: { coding: [{ system: SYSTEM, code }] },
++      valueSampledData: {
++        origin: { value: 0, unit, system: UCUM, code: unit },
++        period,
++        dimensions: 1,
++        data: chunk.channels[ch].map(String).join(" "),
++      },
++    })),
++  };
++}
+diff --git a/receiver/src/outbox.js b/receiver/src/outbox.js
+new file mode 100644
+index 0000000..9281284
+--- /dev/null
++++ b/receiver/src/outbox.js
+@@ -0,0 +1,85 @@
++// Durable outbox: records stay until the server confirms them (see uploader.js).
++// Store interface: put(record) -> id, update(record), delete(id), all() -> record[] in id order.
++// Store methods may be sync or async; Outbox awaits them.
++
++export function sessionKey(card) {
++  return `${card.patient}|${card.device}`;
++}
++
++export class MemoryStore {
++  constructor() { this._rows = new Map(); this._next = 1; }
++  put(record) {
++    const id = this._next++;
++    this._rows.set(id, { ...record, id });
++    return id;
++  }
++  update(record) { this._rows.set(record.id, { ...record }); }
++  delete(id) { this._rows.delete(id); }
++  all() { return [...this._rows.values()].sort((a, b) => a.id - b.id); }
++}
++
++export class IndexedDbStore {
++  constructor(dbName = "prata-capture") {
++    this._dbName = dbName;
++    this._db = null;
++  }
++
++  async _open() {
++    if (this._db) return this._db;
++    this._db = await new Promise((resolve, reject) => {
++      const req = indexedDB.open(this._dbName, 1);
++      req.onupgradeneeded = () => req.result.createObjectStore("outbox", { keyPath: "id", autoIncrement: true });
++      req.onsuccess = () => resolve(req.result);
++      req.onerror = () => reject(req.error);
++    });
++    try { await navigator.storage?.persist?.(); } catch { /* refusal is fine */ }
++    return this._db;
++  }
++
++  async _tx(mode, fn) {
++    const db = await this._open();
++    return new Promise((resolve, reject) => {
++      const tx = db.transaction("outbox", mode);
++      const req = fn(tx.objectStore("outbox"));
++      tx.oncomplete = () => resolve(req.result);
++      tx.onerror = () => reject(tx.error);
++      tx.onabort = () => reject(tx.error);
++    });
++  }
++
++  put(record) { const { id, ...rest } = record; return this._tx("readwrite", (s) => s.add(rest)); }
++  update(record) { return this._tx("readwrite", (s) => s.put(record)); }
++  delete(id) { return this._tx("readwrite", (s) => s.delete(id)); }
++  all() { return this._tx("readonly", (s) => s.getAll()); }
++}
++
++export class Outbox {
++  constructor(store) { this.store = store; }
++
++  async add({ identifier, sessionKey: key, observation }) {
++    return await this.store.put({ identifier, sessionKey: key, observation, rejected: false, reason: null });
++  }
++
++  async nextFor(key) {
++    const rows = await this.store.all();
++    return rows.find((r) => r.sessionKey === key && !r.rejected) ?? null;
++  }
++
++  async remove(id) { await this.store.delete(id); }
++
++  async markRejected(id, reason) {
++    const row = (await this.store.all()).find((r) => r.id === id);
++    if (!row) return;
++    await this.store.update({ ...row, rejected: true, reason });
++  }
++
++  async counts(key) {
++    const c = { pending: 0, rejected: 0, otherSession: 0 };
++    for (const r of await this.store.all()) {
++      if (r.sessionKey !== key) c.otherSession++;
++      else if (r.rejected) c.rejected++;
++      else c.pending++;
++    }
++    return c;
++  }
++}
+diff --git a/receiver/src/plot.js b/receiver/src/plot.js
+new file mode 100644
+index 0000000..db8fcc2
+--- /dev/null
++++ b/receiver/src/plot.js
+@@ -0,0 +1,48 @@
++// Rolling trace of the I and Q voltages. Pure maths in Trace; draw() only paints.
++
++export class Trace {
++  constructor(capacity = 1000) {
++    this.capacity = capacity;
++    this.i = [];
++    this.q = [];
++  }
++
++  push(i, q) {
++    this.i.push(i);
++    this.q.push(q);
++    if (this.i.length > this.capacity) {
++      this.i.shift();
++      this.q.shift();
++    }
++  }
++
++  // Each series is scaled to its own range, so the shape is visible at any offset.
++  points(width, height) {
++    return { i: scale(this.i, this.capacity, width, height), q: scale(this.q, this.capacity, width, height) };
++  }
++}
++
++function scale(values, capacity, width, height) {
++  if (values.length === 0) return [];
++  const lo = Math.min(...values);
++  const hi = Math.max(...values);
++  const span = hi - lo;
++  const step = capacity > 1 ? width / (capacity - 1) : 0;
++  return values.map((v, n) => {
++    const frac = span > 0 ? (v - lo) / span : 0.5; // constant signal: draw mid-height
++    return [n * step, height - frac * height];
++  });
++}
++
++export function draw(canvas, trace) {
++  const ctx = canvas.getContext("2d");
++  const { width, height } = canvas;
++  ctx.clearRect(0, 0, width, height);
++  const p = trace.points(width, height);
++  for (const [pts, colour] of [[p.i, "#1b6ec2"], [p.q, "#c2571b"]]) {
++    ctx.strokeStyle = colour;
++    ctx.beginPath();
++    pts.forEach(([x, y], n) => (n === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)));
++    ctx.stroke();
++  }
++}
+diff --git a/receiver/src/serial.js b/receiver/src/serial.js
+new file mode 100644
+index 0000000..190f7b9
+--- /dev/null
++++ b/receiver/src/serial.js
+@@ -0,0 +1,26 @@
++// Web Serial line source. Yields text lines until the signal aborts or the device is lost.
++import { LineSplitter } from "./jsonlines.js";
++
++export async function* serialLines(port, { baudRate = 115200, signal } = {}) {
++  await port.open({ baudRate });
++  const decoder = new TextDecoderStream();
++  // Keep the pipe promise: the port stays locked until the pipe has finished closing.
++  const piped = port.readable.pipeTo(decoder.writable).catch(() => {});
++  const reader = decoder.readable.getReader();
++  const stop = () => { reader.cancel().catch(() => {}); };
++  signal?.addEventListener("abort", stop, { once: true });
++  if (signal?.aborted) stop();
++  const splitter = new LineSplitter();
++  try {
++    for (;;) {
++      const { value, done } = await reader.read(); // a device-lost error propagates
++      if (done) return;
++      for (const line of splitter.push(value)) yield line;
++    }
++  } finally {
++    signal?.removeEventListener("abort", stop);
++    try { await reader.cancel(); } catch { /* already closed or errored */ }
++    await piped; // readable is unlocked now, so close() can succeed
++    try { await port.close(); } catch { /* device may be gone */ }
++  }
++}
+diff --git a/receiver/src/simulator.js b/receiver/src/simulator.js
+new file mode 100644
+index 0000000..0b5b765
+--- /dev/null
++++ b/receiver/src/simulator.js
+@@ -0,0 +1,48 @@
++// Simulated device: yields the same lines the firmware prints.
++import { FIELDS } from "./jsonlines.js";
++
++export function formatLine(sampleIdx, fs, values) {
++  const v = { missed: 0, I: 1.65, Q: 1.65, ax: 0, ay: 0, az: 1, gx: 0, gy: 0, gz: 0, ...values };
++  const f6 = (x) => Number(x).toFixed(6);
++  const rec = {
++    epoch_id: 0, sample_idx: sampleIdx, t_host_unix: "0.000", fs, crc_ok: "true", missed: v.missed,
++    I: f6(v.I), Q: f6(v.Q), ax: f6(v.ax), ay: f6(v.ay), az: f6(v.az),
++    gx: f6(v.gx), gy: f6(v.gy), gz: f6(v.gz),
++  };
++  return "{" + FIELDS.map((k) => `"${k}":${rec[k]}`).join(",") + "}";
++}
++
++function defaultSleep(ms, signal) {
++  return new Promise((resolve) => {
++    const done = () => { clearTimeout(timer); signal?.removeEventListener("abort", done); resolve(); };
++    const timer = setTimeout(done, ms);
++    signal?.addEventListener("abort", done, { once: true });
++  });
++}
++
++// Respiration sine + pulse + small noise, as phase of the I/Q vector.
++function phaseAt(t) {
++  const resp = 0.8 * Math.sin(2 * Math.PI * 0.25 * t);
++  const pulse = 0.15 * Math.sin(2 * Math.PI * 1.2 * t);
++  const noise = (Math.random() - 0.5) * 0.02;
++  return resp + pulse + noise;
++}
++
++export async function* simulatorLines({ fs = 100, now = Date.now, sleep, signal } = {}) {
++  const wait = sleep ?? ((ms) => defaultSleep(ms, signal));
++  const start = now();
++  let emitted = 0;
++  while (!signal?.aborted) {
++    const due = Math.floor(((now() - start) / 1000) * fs) - emitted;
++    for (let n = 0; n < due; n++) {
++      if (signal?.aborted) return;
++      const phase = phaseAt(emitted / fs);
++      yield formatLine(emitted, fs, {
++        I: 1.65 + 0.4 * Math.cos(phase + 0.6),
++        Q: 1.65 + 0.4 * Math.sin(phase + 0.6),
++      });
++      emitted++;
++    }
++    await wait(20);
++  }
++}
+diff --git a/receiver/src/uploader.js b/receiver/src/uploader.js
+new file mode 100644
+index 0000000..422da4f
+--- /dev/null
++++ b/receiver/src/uploader.js
+@@ -0,0 +1,106 @@
++// Sends outbox records one at a time. A record is deleted only after 200 or 201.
++
++import { sessionKey } from "./outbox.js";
++
++const BACKOFF_MS = [1000, 2000, 4000, 8000, 16000, 30000];
++const IDLE_MS = 500;
++
++export class Uploader {
++  constructor({ outbox, fetchFn, card, sleep, onStatus, baseUrl = "/fhir-r4/v1" }) {
++    this.outbox = outbox;
++    this.fetchFn = fetchFn;
++    this.card = card;
++    this.sleep = sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
++    this.onStatus = onStatus ?? (() => {});
++    this.baseUrl = baseUrl;
++    this.confirmed = 0;
++    this.lastRejectedReason = null;
++    this.failures = 0;
++    this.paused = false;
++    this.running = false;
++  }
++
++  _status(state) {
++    this.onStatus({ state, confirmed: this.confirmed, lastRejectedReason: this.lastRejectedReason });
++  }
++
++  async step() {
++    if (this.paused) return "auth";
++    const rec = await this.outbox.nextFor(sessionKey(this.card));
++    if (!rec) { this._status("idle"); return "idle"; }
++    this._status("sending");
++
++    let res;
++    try {
++      res = await this.fetchFn(`${this.baseUrl}/Observation`, {
++        method: "POST",
++        headers: {
++          Authorization: `Bearer ${this.card.token}`,
++          "Content-Type": "application/fhir+json",
++          Accept: "application/fhir+json",
++          "If-None-Exist": `identifier=${rec.identifier}`,
++        },
++        body: JSON.stringify(rec.observation),
++      });
++    } catch {
++      return await this._retry();
++    }
++
++    if (res.status === 200 || res.status === 201) {
++      await this.outbox.remove(rec.id);
++      this.confirmed++;
++      this.failures = 0;
++      this._status("sending");
++      return "sent";
++    }
++    if (res.status === 401 || res.status === 403) {
++      this.paused = true;
++      this._status("auth");
++      return "auth";
++    }
++    if (res.status >= 500) return await this._retry();
++
++    // Other 4xx (and anything unexpected): keep the record, mark it rejected.
++    const reason = await this._reason(res);
++    await this.outbox.markRejected(rec.id, reason);
++    this.lastRejectedReason = reason;
++    this._status("sending");
++    return "rejected";
++  }
++
++  async _reason(res) {
++    try {
++      const oo = JSON.parse(await res.text());
++      const text = (oo.issue ?? []).map((i) => i?.details?.text).find((t) => typeof t === "string" && t);
++      if (text) return text;
++    } catch { /* fall through */ }
++    return `HTTP ${res.status}`;
++  }
++
++  async _retry() {
++    const delay = BACKOFF_MS[Math.min(this.failures, BACKOFF_MS.length - 1)];
++    this.failures++;
++    this._status("retry");
++    await this.sleep(delay);
++    return "retry";
++  }
++
++  start() {
++    if (this.running) return;
++    this.running = true;
++    (async () => {
++      while (this.running) {
++        const r = await this.step();
++        if (r === "idle" || r === "auth") await this.sleep(IDLE_MS);
++      }
++    })();
++  }
++
++  stop() { this.running = false; }
++
++  resume(card) {
++    this.card = card;
++    this.paused = false;
++    this.failures = 0;
++  }
++}
+diff --git a/receiver/tests/capture.test.js b/receiver/tests/capture.test.js
+new file mode 100644
+index 0000000..3af8c6d
+--- /dev/null
++++ b/receiver/tests/capture.test.js
+@@ -0,0 +1,101 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import { Capture } from "../src/capture.js";
++import { Outbox, MemoryStore, sessionKey } from "../src/outbox.js";
++import { formatLine } from "../src/simulator.js";
++
++const card = {
++  token: "t", patient: "Patient/p1", encounter: "Encounter/e1",
++  device: "Device/d1", org: "org1", label: "L",
++};
++
++async function* gen(items, thenThrow) {
++  for (const x of items) yield x;
++  if (thenThrow) throw thenThrow;
++}
++const lines = (idxs) => idxs.map((i) => formatLine(i, 100, {}));
++
++function make(extra = {}) {
++  const store = new MemoryStore();
++  const outbox = new Outbox(store);
++  const samples = [];
++  let n = 0;
++  const cap = new Capture({
++    outbox, sessionKey: sessionKey(card), card, source: "SIMULATED",
++    onSample: (s) => samples.push(s), newId: () => "cap-" + ++n, ...extra,
++  });
++  return { store, outbox, cap, samples };
++}
++
++test("lines reach onSample and the outbox", async () => {
++  const { cap, samples, store } = make();
++  await cap.run(gen(lines([0, 1, 2])));
++  assert.equal(samples.length, 3);
++  assert.equal(store.all().length, 1);
++});
++
++test("every chunk is in the outbox before run resolves", async () => {
++  const slow = new Outbox(new MemoryStore());
++  const orig = slow.add.bind(slow);
++  slow.add = async (r) => { await new Promise((r2) => setTimeout(r2, 5)); return orig(r); };
++  const { cap } = make({ outbox: slow });
++  await cap.run(gen(lines(Array.from({ length: 2500 }, (_, i) => i))));
++  const rows = slow.store.all();
++  assert.equal(rows.length, 3);
++  assert.deepEqual(rows.map((r) => r.identifier.split("-").pop()), ["0", "1", "2"]);
++});
++
++test("ending the iterable flushes the partial chunk and returns ended", async () => {
++  const { cap, store } = make();
++  assert.equal(await cap.run(gen(lines([0, 1]))), "ended");
++  assert.equal(store.all().length, 1);
++});
++
++test("the iterable throwing flushes and returns disconnected", async () => {
++  const { cap, store } = make();
++  assert.equal(await cap.run(gen(lines([0, 1]), new Error("unplugged"))), "disconnected");
++  assert.equal(store.all().length, 1);
++});
++
++test("store quota error stops reading and returns quota", async () => {
++  const outbox = new Outbox(new MemoryStore());
++  outbox.add = async () => { throw new DOMException("full", "QuotaExceededError"); };
++  let consumed = 0;
++  async function* src() { for (let i = 0; i < 5000; i++) { consumed++; yield* lines([i]); } }
++  const { cap } = make({ outbox });
++  assert.equal(await cap.run(src()), "quota");
++  assert.ok(consumed < 5000);
++});
++
++test("each run has a new captureId", async () => {
++  const { cap, store } = make();
++  await cap.run(gen(lines([0])));
++  await cap.run(gen(lines([0])));
++  const ids = store.all().map((r) => r.identifier);
++  assert.equal(ids.length, 2);
++  assert.notEqual(ids[0], ids[1]);
++  assert.match(ids[0], /^cap-1-/);
++});
++
++test("stats count samples, gaps and rejected lines", async () => {
++  const seen = [];
++  const { cap } = make({ onStatus: (s) => seen.push({ ...s }) });
++  await cap.run(gen([...lines([0, 1]), "{bad", "banner text", ...lines([4])]));
++  assert.deepEqual(cap.stats, { samples: 3, gaps: 2, rejected: 1 });
++  assert.deepEqual(seen.at(-1), cap.stats);
++});
++
++test("rejected line followed by the next index produces an E gap", async () => {
++  const { cap, store } = make();
++  await cap.run(gen([...lines([0]), '{"bad":1}', ...lines([2])]));
++  const obs = store.all()[0].observation;
++  assert.equal(obs.component[0].valueSampledData.data.split(" ")[1], "E");
++  assert.match(obs.note[0].text, /"rejected_lines":1/);
++});
++
++test("a throwing onSample rejects run() instead of reporting disconnected", async () => {
++  const boom = new Error("ui bug");
++  const { cap, store } = make({ onSample: () => { throw boom; } });
++  await assert.rejects(cap.run(gen(lines([0, 1]))), (e) => e === boom);
++  assert.equal(store.all().length, 1);
++});
+diff --git a/receiver/tests/card.test.js b/receiver/tests/card.test.js
+new file mode 100644
+index 0000000..74ce9ad
+--- /dev/null
++++ b/receiver/tests/card.test.js
+@@ -0,0 +1,29 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import { parseCard } from "../src/card.js";
++
++const good = {
++  token: "tok", patient: "Patient/p1", encounter: "Encounter/e1",
++  device: "Device/d1", org: "org1", label: "Synthetic A",
++};
++
++test("a valid card parses", () => {
++  assert.deepEqual(parseCard(JSON.stringify(good)), good);
++});
++
++test("empty string gives a message saying to paste a card", () => {
++  assert.throws(() => parseCard("  "), /paste/i);
++});
++
++test("non-JSON text gives a message saying it is not valid JSON", () => {
++  assert.throws(() => parseCard("hello"), /not valid JSON/i);
++});
++
++test("seed summary JSON is rejected, naming the missing field", () => {
++  const seed = { organization: "org1", patients: [], practitioner: "x" };
++  assert.throws(() => parseCard(JSON.stringify(seed)), /missing field token/);
++});
++
++test("patient without the Patient/ prefix is rejected", () => {
++  assert.throws(() => parseCard(JSON.stringify({ ...good, patient: "p1" })), /patient must start with Patient\//);
++});
+diff --git a/receiver/tests/chunker.test.js b/receiver/tests/chunker.test.js
+new file mode 100644
+index 0000000..689cd10
+--- /dev/null
++++ b/receiver/tests/chunker.test.js
+@@ -0,0 +1,185 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import { Chunker } from "../src/chunker.js";
++
++const s = (idx, o = {}) => ({
++  sampleIdx: idx, fs: 100, missed: 0,
++  I: 1, Q: 2, ax: 0, ay: 0, az: 1, gx: 0, gy: 0, gz: 0, ...o,
++});
++function make(opts = {}) {
++  const chunks = [];
++  const c = new Chunker({ now: () => 1_000_000, onChunk: (k) => chunks.push(k), ...opts });
++  return { c, chunks };
++}
++const feed = (c, from, n) => { for (let i = 0; i < n; i++) c.addSample(s(from + i)); };
++
++test("1000 samples emit one chunk; chunk 2 gets index 1", () => {
++  const { c, chunks } = make();
++  feed(c, 0, 1000);
++  assert.equal(chunks.length, 1);
++  assert.equal(chunks[0].chunkIndex, 0);
++  assert.equal(chunks[0].segment, 0);
++  assert.equal(chunks[0].channels.I.length, 1000);
++  feed(c, 1000, 1000);
++  assert.equal(chunks.length, 2);
++  assert.equal(chunks[1].chunkIndex, 1);
++});
++
++test("gap of 3 fills 3 E in every channel and counts gapSamples 3", () => {
++  const { c, chunks } = make();
++  feed(c, 0, 2);
++  c.addSample(s(5));
++  c.flush();
++  const k = chunks[0];
++  assert.deepEqual(k.channels.I, [1, 1, "E", "E", "E", 1]);
++  for (const ch of Object.values(k.channels)) assert.equal(ch.length, 6);
++  assert.deepEqual(k.channels.gz, [0, 0, "E", "E", "E", 0]);
++  assert.equal(k.gapSamples, 3);
++});
++
++test("gap crossing a chunk boundary: both chunks 1000 long, none lost", () => {
++  const { c, chunks } = make();
++  feed(c, 0, 998);
++  c.addSample(s(1003)); // gap of 5: 2 fill fill the chunk, 3 start the next
++  feed(c, 1004, 996);
++  assert.equal(chunks.length, 2);
++  assert.equal(chunks[0].channels.I.length, 1000);
++  assert.equal(chunks[1].channels.I.length, 1000);
++  assert.equal(chunks[0].gapSamples, 2);
++  assert.equal(chunks[1].gapSamples, 3);
++  assert.deepEqual(chunks[1].channels.I.slice(0, 4), ["E", "E", "E", 1]);
++  assert.equal(chunks[0].segment, chunks[1].segment);
++});
++
++test("gap of 999 fills; gap of 1000 starts a new segment", () => {
++  const a = make();
++  a.c.addSample(s(0));
++  a.c.addSample(s(1000)); // gap 999
++  assert.equal(a.chunks.length, 1); // 1 + 999 fill = 1000 -> emitted
++  a.c.flush();
++  assert.equal(a.chunks.length, 2);
++  assert.equal(a.chunks[0].gapSamples, 999);
++  assert.equal(a.chunks[1].segment, 0);
++
++  const b = make();
++  b.c.addSample(s(0));
++  b.c.addSample(s(1001)); // gap 1000
++  b.c.flush();
++  assert.equal(b.chunks.length, 2);
++  assert.equal(b.chunks[0].channels.I.length, 1);
++  assert.equal(b.chunks[1].segment, 1);
++  assert.equal(b.chunks[1].chunkIndex, 0);
++  assert.equal(b.chunks[1].gapSamples, 0);
++});
++
++test("sample_idx going backwards flushes and starts segment+1, chunkIndex 0", () => {
++  const { c, chunks } = make();
++  feed(c, 10, 5);
++  feed(c, 0, 3);
++  c.flush();
++  assert.equal(chunks.length, 2);
++  assert.equal(chunks[0].channels.I.length, 5);
++  assert.equal(chunks[1].segment, 1);
++  assert.equal(chunks[1].chunkIndex, 0);
++  assert.equal(chunks[1].channels.I.length, 3);
++});
++
++test("repeated sample_idx starts a new segment", () => {
++  const { c, chunks } = make();
++  c.addSample(s(4));
++  c.addSample(s(4));
++  c.flush();
++  assert.equal(chunks.length, 2);
++  assert.equal(chunks[1].segment, 1);
++});
++
++test("fs change flushes and starts a new segment", () => {
++  const { c, chunks } = make();
++  feed(c, 0, 3);
++  c.addSample(s(3, { fs: 250 }));
++  c.flush();
++  assert.equal(chunks.length, 2);
++  assert.equal(chunks[0].fs, 100);
++  assert.equal(chunks[1].fs, 250);
++  assert.equal(chunks[1].segment, 1);
++  assert.equal(chunks[1].gapSamples, 0);
++});
++
++test("first sample at any index causes no gap", () => {
++  const { c, chunks } = make();
++  c.addSample(s(123456));
++  c.flush();
++  assert.equal(chunks[0].channels.I.length, 1);
++  assert.equal(chunks[0].gapSamples, 0);
++  assert.equal(chunks[0].segment, 0);
++});
++
++test("flush emits a partial chunk; flush with nothing emits nothing", () => {
++  const { c, chunks } = make();
++  c.flush();
++  assert.equal(chunks.length, 0);
++  feed(c, 0, 7);
++  c.flush();
++  assert.equal(chunks.length, 1);
++  assert.equal(chunks[0].channels.Q.length, 7);
++  c.flush();
++  assert.equal(chunks.length, 1);
++});
++
++test("noteRejected counts on the next emitted chunk, then resets", () => {
++  const { c, chunks } = make();
++  c.noteRejected(); c.noteRejected();
++  feed(c, 0, 2);
++  c.flush();
++  feed(c, 2, 2);
++  c.flush();
++  assert.equal(chunks[0].rejectedLines, 2);
++  assert.equal(chunks[1].rejectedLines, 0);
++});
++
++test("rejected count survives an empty flush", () => {
++  const { c, chunks } = make();
++  c.noteRejected();
++  c.flush();
++  assert.equal(chunks.length, 0);
++  feed(c, 0, 1);
++  c.flush();
++  assert.equal(chunks[0].rejectedLines, 1);
++});
++
++test("all channels have equal length in every emitted chunk", () => {
++  const { c, chunks } = make({ chunkSize: 10 });
++  feed(c, 0, 7);
++  c.addSample(s(30));
++  feed(c, 31, 5);
++  c.flush();
++  assert.ok(chunks.length >= 3);
++  for (const k of chunks) {
++    const lens = new Set(Object.values(k.channels).map((a) => a.length));
++    assert.equal(lens.size, 1);
++    assert.deepEqual(Object.keys(k.channels), ["I", "Q", "ax", "ay", "az", "gx", "gy", "gz"]);
++  }
++});
++
++test("deviceMissed is the latest sample's missed", () => {
++  const { c, chunks } = make();
++  c.addSample(s(0, { missed: 2 }));
++  c.addSample(s(1, { missed: 5 }));
++  c.flush();
++  assert.equal(chunks[0].deviceMissed, 5);
++});
++
++test("startTimeMs back-dates by leading gap entries", () => {
++  const { c, chunks } = make({ chunkSize: 4 });
++  feed(c, 0, 3);
++  c.addSample(s(8)); // last idx 2, so gap 5
++  c.flush();
++  // chunk 2 begins with 4 fill entries, 1 fill + real? see below
++  // chunk 1: samples 0,1,2 + fill -> full. chunk 2: 4 fill -> full. chunk 3: real.
++  assert.equal(chunks.length, 3);
++  assert.equal(chunks[0].startTimeMs, 1_000_000);
++  // chunk 2 first entry is a fill with 4 fill entries remaining (incl. itself): 4 * 10 ms
++  // gap = 8 - 2 - 1 = 5; 1 went to chunk 1; 4 remain.
++  assert.equal(chunks[1].startTimeMs, 1_000_000 - 40);
++  assert.equal(chunks[2].startTimeMs, 1_000_000);
++});
+diff --git a/receiver/tests/coalesce.test.js b/receiver/tests/coalesce.test.js
+new file mode 100644
+index 0000000..ba7ffa4
+--- /dev/null
++++ b/receiver/tests/coalesce.test.js
+@@ -0,0 +1,42 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import { coalesce } from "../src/coalesce.js";
++
++function fakeTimers() {
++  const pending = [];
++  return { setTimer: (f) => { pending.push(f); return pending.length; }, pending };
++}
++
++test("many calls before the timer fires run fn once", async () => {
++  const t = fakeTimers();
++  let n = 0;
++  const schedule = coalesce(async () => { n++; }, 250, t);
++  for (let k = 0; k < 100; k++) schedule();
++  assert.equal(t.pending.length, 1);
++  await t.pending.shift()();
++  assert.equal(n, 1);
++  assert.equal(t.pending.length, 0);
++});
++
++test("never runs two at once; a call during a run triggers one later run", async () => {
++  const t = fakeTimers();
++  let active = 0, maxActive = 0, runs = 0;
++  let release;
++  const schedule = coalesce(async () => {
++    runs++; active++; maxActive = Math.max(maxActive, active);
++    await new Promise((r) => { release = r; });
++    active--;
++  }, 250, t);
++  schedule();
++  const first = t.pending.shift()();
++  schedule(); schedule();
++  assert.equal(t.pending.length, 0);
++  release();
++  await first;
++  assert.equal(t.pending.length, 1);
++  const second = t.pending.shift()();
++  release();
++  await second;
++  assert.equal(runs, 2);
++  assert.equal(maxActive, 1);
++});
+diff --git a/receiver/tests/fixtures/make_chunk.mjs b/receiver/tests/fixtures/make_chunk.mjs
+new file mode 100644
+index 0000000..1a10ccc
+--- /dev/null
++++ b/receiver/tests/fixtures/make_chunk.mjs
+@@ -0,0 +1,37 @@
++// Usage: node make_chunk.mjs '<card JSON>'
++// Prints {"observation", "identifier", "expected"} for one chunk that includes a gap.
++// Lines go through formatLine, the real parser, the real chunker and the real builder.
++import { formatLine } from "../../src/simulator.js";
++import { parseLine } from "../../src/jsonlines.js";
++import { Chunker } from "../../src/chunker.js";
++import { buildObservation, identifierValue } from "../../src/observation.js";
++
++const card = JSON.parse(process.argv[2]);
++const captureId = "cap-e2e-fixture";
++const FS = 100;
++const GAP = [10, 11]; // sample indexes the "device" never sent
++const N = 20;
++const CHANNELS = ["I", "Q", "ax", "ay", "az", "gx", "gy", "gz"];
++
++const chunks = [];
++const chunker = new Chunker({ now: () => 1_700_000_000_000, onChunk: (c) => chunks.push(c) });
++const expected = Object.fromEntries(CHANNELS.map((c) => [c, []]));
++
++for (let i = 0; i < N; i++) {
++  const values = { I: 1.5 + i * 0.01, Q: 1.8 - i * 0.01, ax: 0.1 * i, ay: -0.05 * i, az: 1, gx: i, gy: -i, gz: 0 };
++  if (GAP.includes(i)) {
++    for (const c of CHANNELS) expected[c].push("E");
++    continue;
++  }
++  // Expected tokens come from the wire format (6 decimals) independently of the chunker.
++  for (const c of CHANNELS) expected[c].push(String(Number(values[c].toFixed(6))));
++  const parsed = parseLine(formatLine(i, FS, values));
++  if (parsed.kind !== "sample") throw new Error(`line ${i} not a sample`);
++  chunker.addSample(parsed.sample);
++}
++chunker.flush();
++if (chunks.length !== 1) throw new Error(`expected 1 chunk, got ${chunks.length}`);
++
++const observation = buildObservation(chunks[0], card, { captureId, source: "SIMULATED" });
++const identifier = `http://sys-ids.kemkes.go.id/organization/${card.org}|${identifierValue(captureId, chunks[0])}`;
++console.log(JSON.stringify({ observation, identifier, expected }));
+diff --git a/receiver/tests/jsonlines.test.js b/receiver/tests/jsonlines.test.js
+new file mode 100644
+index 0000000..6897309
+--- /dev/null
++++ b/receiver/tests/jsonlines.test.js
+@@ -0,0 +1,103 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import { readFileSync } from "node:fs";
++import { parseLine, LineSplitter, FIELDS } from "../src/jsonlines.js";
++
++const good = {
++  epoch_id: 1, sample_idx: 5, t_host_unix: 1.5, fs: 100, crc_ok: true, missed: 0,
++  I: 1.65, Q: 1.7, ax: 0, ay: 0, az: 1, gx: 0, gy: 0, gz: 0,
++};
++const line = (o) => JSON.stringify(o);
++const without = (k) => { const o = { ...good }; delete o[k]; return o; };
++
++test("valid firmware line gives a sample", () => {
++  const r = parseLine(line(good));
++  assert.equal(r.kind, "sample");
++  assert.deepEqual(r.sample, {
++    sampleIdx: 5, fs: 100, missed: 0, I: 1.65, Q: 1.7,
++    ax: 0, ay: 0, az: 1, gx: 0, gy: 0, gz: 0,
++  });
++});
++
++test("READY banner and ingest text are ignored, not rejected", () => {
++  assert.equal(parseLine("READY radar_json i_pin=1 q_pin=2 fs=100 imu_ok=true").kind, "ignored");
++  assert.equal(parseLine("ingest POST -> 200").kind, "ignored");
++});
++
++test("blank line is ignored", () => {
++  assert.equal(parseLine("").kind, "ignored");
++  assert.equal(parseLine("  \r").kind, "ignored");
++});
++
++test("broken {json is rejected", () => {
++  assert.equal(parseLine('{"epoch_id":1,').kind, "rejected");
++});
++
++test("missing field is rejected, naming it", () => {
++  const r = parseLine(line(without("gz")));
++  assert.equal(r.kind, "rejected");
++  assert.match(r.reason, /gz/);
++});
++
++test("non-integer sample_idx or fs is rejected", () => {
++  assert.equal(parseLine(line({ ...good, sample_idx: 1.5 })).kind, "rejected");
++  assert.equal(parseLine(line({ ...good, fs: "100" })).kind, "rejected");
++});
++
++test("negative sample_idx and fs of 0 are rejected", () => {
++  assert.equal(parseLine(line({ ...good, sample_idx: -1 })).kind, "rejected");
++  assert.equal(parseLine(line({ ...good, fs: 0 })).kind, "rejected");
++});
++
++test("string I value is rejected", () => {
++  assert.equal(parseLine(line({ ...good, I: "1.65" })).kind, "rejected");
++});
++
++test("crc_ok:false is rejected with reason crc_ok", () => {
++  const r = parseLine(line({ ...good, crc_ok: false }));
++  assert.equal(r.kind, "rejected");
++  assert.match(r.reason, /crc_ok/);
++});
++
++test("JSON array starting [ is ignored", () => {
++  assert.equal(parseLine("[1,2,3]").kind, "ignored");
++});
++
++test("FIELDS match radar_json.ino", () => {
++  const ino = readFileSync("arduino/radar_json/radar_json.ino", "utf8");
++  const keys = [...ino.matchAll(/\\"(\w+)\\":/g)].map((m) => m[1]);
++  assert.deepEqual(keys, FIELDS);
++});
++
++test("a line split across pushes comes out once, whole", () => {
++  const s = new LineSplitter();
++  assert.deepEqual(s.push('{"a":'), []);
++  assert.deepEqual(s.push("1}\n"), ['{"a":1}']);
++});
++
++test("two lines in one push come out in order", () => {
++  assert.deepEqual(new LineSplitter().push("a\nb\n"), ["a", "b"]);
++});
++
++test("CRLF is stripped", () => {
++  assert.deepEqual(new LineSplitter().push("a\r\nb\r\n"), ["a", "b"]);
++});
++
++test("a partial line stays buffered", () => {
++  const s = new LineSplitter();
++  assert.deepEqual(s.push("a\npar"), ["a"]);
++  assert.deepEqual(s.push("t\n"), ["part"]);
++});
++
++test("a mid-line start parses as ignored", () => {
++  const [l] = new LineSplitter().push('":1.2,"Q":3}\n');
++  assert.equal(parseLine(l).kind, "ignored");
++});
++
++test("over 4096 chars without newline is emitted and the buffer resets", () => {
++  const s = new LineSplitter();
++  const out = s.push("x".repeat(4097));
++  assert.equal(out.length, 1);
++  assert.equal(out[0].length, 4097);
++  assert.deepEqual(s.push("y\n"), ["y"]);
++});
+diff --git a/receiver/tests/observation.test.js b/receiver/tests/observation.test.js
+new file mode 100644
+index 0000000..3063ee0
+--- /dev/null
++++ b/receiver/tests/observation.test.js
+@@ -0,0 +1,88 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import { buildObservation, identifierValue } from "../src/observation.js";
++
++const card = {
++  token: "t", patient: "Patient/p1", encounter: "Encounter/e1",
++  device: "Device/d1", org: "org9", label: "x",
++};
++const chunk = (o = {}) => ({
++  segment: 2, chunkIndex: 5, fs: 100, startTimeMs: Date.UTC(2026, 10, 4, 1, 2, 3, 999),
++  channels: {
++    I: [1.65, "E", 1.649], Q: [2, 2, 2], ax: [0, 0, 0], ay: [0, 0, 0], az: [1, 1, 1],
++    gx: [0, 0, 0], gy: [0, 0, 0], gz: [0, 0, 0],
++  },
++  gapSamples: 1, rejectedLines: 4, deviceMissed: 7, ...o,
++});
++const opts = { captureId: "cap-abc", source: "serial" };
++
++test("code, identifier, references and component order match the spec", () => {
++  const o = buildObservation(chunk(), card, opts);
++  assert.equal(o.resourceType, "Observation");
++  assert.equal(o.status, "final");
++  assert.deepEqual(o.identifier, [{
++    system: "http://sys-ids.kemkes.go.id/organization/org9", value: "cap-abc-2-5",
++  }]);
++  assert.equal(identifierValue("cap-abc", chunk()), "cap-abc-2-5");
++  assert.deepEqual(o.code, { coding: [{
++    system: "urn:prata:radar-signal", code: "raw-capture", display: "Raw radar I/Q capture",
++  }] });
++  assert.deepEqual(o.subject, { reference: "Patient/p1" });
++  assert.deepEqual(o.encounter, { reference: "Encounter/e1" });
++  assert.deepEqual(o.device, { reference: "Device/d1" });
++  assert.deepEqual(
++    o.component.map((c) => c.code.coding[0].code),
++    ["i-voltage", "q-voltage", "accel-x", "accel-y", "accel-z", "gyro-x", "gyro-y", "gyro-z"],
++  );
++  for (const c of o.component) {
++    assert.equal(c.code.coding[0].system, "urn:prata:radar-signal");
++    assert.equal(c.valueSampledData.dimensions, 1);
++    assert.equal(c.valueSampledData.origin.value, 0);
++    assert.equal(c.valueSampledData.origin.system, "http://unitsofmeasure.org");
++  }
++});
++
++test("note parses to {source, gap_samples, rejected_lines, device_missed}", () => {
++  const o = buildObservation(chunk(), card, opts);
++  assert.equal(o.note.length, 1);
++  assert.deepEqual(JSON.parse(o.note[0].text),
++    { source: "serial", gap_samples: 1, rejected_lines: 4, device_missed: 7 });
++  assert.equal(o.note[0].text,
++    '{"source":"serial","gap_samples":1,"rejected_lines":4,"device_missed":7}');
++});
++
++test("period is 10 at fs 100 and 4 at fs 250", () => {
++  assert.equal(buildObservation(chunk(), card, opts).component[0].valueSampledData.period, 10);
++  assert.equal(buildObservation(chunk({ fs: 250 }), card, opts).component[0].valueSampledData.period, 4);
++});
++
++test("data joins numbers and E with single spaces", () => {
++  const o = buildObservation(chunk(), card, opts);
++  assert.equal(o.component[0].valueSampledData.data, "1.65 E 1.649");
++  assert.equal(o.component[1].valueSampledData.data, "2 2 2");
++});
++
++test("origin unit and UCUM code per channel: V, [g], deg/s", () => {
++  const o = buildObservation(chunk(), card, opts);
++  const units = o.component.map((c) => [c.valueSampledData.origin.unit, c.valueSampledData.origin.code]);
++  assert.deepEqual(units, [
++    ["V", "V"], ["V", "V"], ["[g]", "[g]"], ["[g]", "[g]"], ["[g]", "[g]"],
++    ["deg/s", "deg/s"], ["deg/s", "deg/s"], ["deg/s", "deg/s"],
++  ]);
++});
++
++test("effectiveDateTime has the form YYYY-MM-DDThh:mm:ss+00:00", () => {
++  const o = buildObservation(chunk(), card, opts);
++  assert.equal(o.effectiveDateTime, "2026-11-04T01:02:03+00:00");
++});
++
++test("no category and no top-level value", () => {
++  const o = buildObservation(chunk(), card, opts);
++  assert.equal("category" in o, false);
++  assert.equal(Object.keys(o).some((k) => k.startsWith("value")), false);
++});
++
++test("SIMULATED source appears in note", () => {
++  const o = buildObservation(chunk(), card, { captureId: "cap-abc", source: "SIMULATED" });
++  assert.equal(JSON.parse(o.note[0].text).source, "SIMULATED");
++});
+diff --git a/receiver/tests/outbox.test.js b/receiver/tests/outbox.test.js
+new file mode 100644
+index 0000000..97ded3c
+--- /dev/null
++++ b/receiver/tests/outbox.test.js
+@@ -0,0 +1,52 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import { Outbox, MemoryStore, sessionKey } from "../src/outbox.js";
++
++const card = { patient: "Patient/p1", device: "Device/d1" };
++const rec = (n, key = sessionKey(card)) => ({ identifier: `id-${n}`, sessionKey: key, observation: { n } });
++
++test("sessionKey joins patient and device", () => {
++  assert.equal(sessionKey(card), "Patient/p1|Device/d1");
++});
++
++test("nextFor returns the oldest pending record of that session", async () => {
++  const ob = new Outbox(new MemoryStore());
++  await ob.add(rec(1, "other"));
++  await ob.add(rec(2));
++  await ob.add(rec(3));
++  assert.equal((await ob.nextFor(sessionKey(card))).identifier, "id-2");
++  assert.equal(await ob.nextFor("none"), null);
++});
++
++test("records survive into a new Outbox on the same store", async () => {
++  const store = new MemoryStore();
++  await new Outbox(store).add(rec(1));
++  const next = await new Outbox(store).nextFor(sessionKey(card));
++  assert.equal(next.identifier, "id-1");
++});
++
++test("markRejected keeps the record, excluded from nextFor, counted as rejected", async () => {
++  const store = new MemoryStore();
++  const ob = new Outbox(store);
++  const a = await ob.add(rec(1));
++  await ob.add(rec(2));
++  await ob.add(rec(3, "other"));
++  await ob.markRejected(a, "bad");
++  assert.equal((await ob.nextFor(sessionKey(card))).identifier, "id-2");
++  assert.equal(store.all().length, 3);
++  assert.deepEqual(await ob.counts(sessionKey(card)), { pending: 1, rejected: 1, otherSession: 1 });
++});
++
++test("remove deletes the record", async () => {
++  const store = new MemoryStore();
++  const ob = new Outbox(store);
++  const a = await ob.add(rec(1));
++  await ob.remove(a);
++  assert.equal(store.all().length, 0);
++});
++
++test("add rejects with QuotaExceededError when the store throws it", async () => {
++  const store = new MemoryStore();
++  store.put = () => { throw new DOMException("full", "QuotaExceededError"); };
++  await assert.rejects(new Outbox(store).add(rec(1)), (e) => e.name === "QuotaExceededError");
++});
+diff --git a/receiver/tests/plot.test.js b/receiver/tests/plot.test.js
+new file mode 100644
+index 0000000..b03ad3e
+--- /dev/null
++++ b/receiver/tests/plot.test.js
+@@ -0,0 +1,35 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import { Trace } from "../src/plot.js";
++
++test("capacity keeps only the last 1000 points", () => {
++  const t = new Trace();
++  for (let n = 0; n < 1500; n++) t.push(n, -n);
++  const p = t.points(1000, 100);
++  assert.equal(p.i.length, 1000);
++  assert.equal(p.q.length, 1000);
++  // oldest kept sample is 500, so it is the lowest I: it sits at the bottom (largest y)
++  assert.ok(p.i[0][1] > p.i[999][1]);
++});
++
++test("a constant signal gives finite y values", () => {
++  const t = new Trace();
++  for (let n = 0; n < 50; n++) t.push(1.65, 1.65);
++  const p = t.points(200, 100);
++  for (const [x, y] of [...p.i, ...p.q]) {
++    assert.ok(Number.isFinite(x) && Number.isFinite(y));
++  }
++});
++
++test("points stay inside width and height", () => {
++  const t = new Trace(100);
++  for (let n = 0; n < 300; n++) t.push(Math.sin(n / 5) * 3, Math.cos(n / 7) * 0.001);
++  const p = t.points(320, 120);
++  for (const [x, y] of [...p.i, ...p.q]) {
++    assert.ok(x >= 0 && x <= 320 && y >= 0 && y <= 120, `${x},${y}`);
++  }
++});
++
++test("an empty trace has no points", () => {
++  assert.deepEqual(new Trace().points(100, 50), { i: [], q: [] });
++});
+diff --git a/receiver/tests/simulator.test.js b/receiver/tests/simulator.test.js
+new file mode 100644
+index 0000000..f3f22b2
+--- /dev/null
++++ b/receiver/tests/simulator.test.js
+@@ -0,0 +1,54 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import { parseLine } from "../src/jsonlines.js";
++import { simulatorLines } from "../src/simulator.js";
++
++// Fake clock: sleep advances time by `step` ms; stops after `ticks` sleeps.
++async function collect({ fs = 100, step = 1000, ticks = 1 } = {}) {
++  let t = 1_000_000;
++  let n = 0;
++  const ac = new AbortController();
++  const sleep = async () => { t += step; if (++n >= ticks) ac.abort(); };
++  const lines = [];
++  for await (const l of simulatorLines({ fs, now: () => t, sleep, signal: ac.signal })) lines.push(l);
++  return lines;
++}
++
++test("each line parses to a sample with consecutive sampleIdx", async () => {
++  const lines = await collect({ ticks: 3 });
++  assert.ok(lines.length > 0);
++  lines.forEach((l, i) => {
++    const r = parseLine(l);
++    assert.equal(r.kind, "sample");
++    assert.equal(r.sample.sampleIdx, i);
++    assert.equal(r.sample.fs, 100);
++  });
++});
++
++test("I and Q stay inside 0 to 3.3 V", async () => {
++  for (const l of await collect({ ticks: 10 })) {
++    const { I, Q } = parseLine(l).sample;
++    assert.ok(I >= 0 && I <= 3.3 && Q >= 0 && Q <= 3.3);
++  }
++});
++
++test("emits elapsed×fs lines after a long sleep, catching up", async () => {
++  const lines = await collect({ fs: 100, step: 2500, ticks: 2 });
++  assert.equal(lines.length, 250);
++});
++
++test("an aborted signal ends the generator", async () => {
++  const ac = new AbortController();
++  ac.abort();
++  const lines = [];
++  for await (const l of simulatorLines({ signal: ac.signal, sleep: async () => {} })) lines.push(l);
++  assert.deepEqual(lines, []);
++});
++
++test("abort during the default sleep ends the generator promptly", async () => {
++  const ac = new AbortController();
++  const gen = simulatorLines({ signal: ac.signal });
++  const p = (async () => { for await (const _ of gen) { /* drain */ } })();
++  setTimeout(() => ac.abort(), 50);
++  await p;
++});
+diff --git a/receiver/tests/uploader.test.js b/receiver/tests/uploader.test.js
+new file mode 100644
+index 0000000..a2d9ae0
+--- /dev/null
++++ b/receiver/tests/uploader.test.js
+@@ -0,0 +1,148 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import { Outbox, MemoryStore, sessionKey } from "../src/outbox.js";
++import { Uploader } from "../src/uploader.js";
++
++const card = { token: "tok", patient: "Patient/p1", device: "Device/d1" };
++const card2 = { token: "tok2", patient: "Patient/p2", device: "Device/d2" };
++const rec = (n, key = sessionKey(card)) => ({ identifier: `id-${n}`, sessionKey: key, observation: { n } });
++const resp = (status, body) => ({ status, ok: status < 300, text: async () => (typeof body === "string" ? body : JSON.stringify(body ?? {})) });
++
++function setup(replies, c = card) {
++  const store = new MemoryStore();
++  const outbox = new Outbox(store);
++  const calls = [];
++  const sleeps = [];
++  const statuses = [];
++  const q = [...replies];
++  const fetchFn = async (url, init) => {
++    calls.push({ url, init, stored: store.all().length });
++    const r = q.length > 1 ? q.shift() : q[0];
++    if (r instanceof Error) throw r;
++    return r;
++  };
++  const up = new Uploader({ outbox, fetchFn, card: c, sleep: async (ms) => { sleeps.push(ms); },
++    onStatus: (s) => statuses.push(s) });
++  return { store, outbox, calls, sleeps, statuses, up };
++}
++
++test("POST sends Authorization, If-None-Exist: identifier=<value>, fhir+json", async () => {
++  const t = setup([resp(201)]);
++  await t.outbox.add(rec(1));
++  assert.equal(await t.up.step(), "sent");
++  const { url, init } = t.calls[0];
++  assert.equal(url, "/fhir-r4/v1/Observation");
++  assert.equal(init.method, "POST");
++  assert.equal(init.headers.Authorization, "Bearer tok");
++  assert.equal(init.headers["If-None-Exist"], "identifier=id-1");
++  assert.equal(init.headers["Content-Type"], "application/fhir+json");
++  assert.deepEqual(JSON.parse(init.body), { n: 1 });
++});
++
++test("201 and 200 both delete the record", async () => {
++  const t = setup([resp(201), resp(200)]);
++  await t.outbox.add(rec(1));
++  await t.outbox.add(rec(2));
++  assert.equal(await t.up.step(), "sent");
++  assert.equal(await t.up.step(), "sent");
++  assert.equal(t.store.all().length, 0);
++  assert.equal(await t.up.step(), "idle");
++  assert.equal(t.statuses.at(-1).confirmed, 2);
++});
++
++test("record stays until the response arrives", async () => {
++  const t = setup([resp(201)]);
++  await t.outbox.add(rec(1));
++  await t.up.step();
++  assert.equal(t.calls[0].stored, 1);
++  assert.equal(t.store.all().length, 0);
++});
++
++test("fetch throwing keeps the record and returns retry", async () => {
++  const t = setup([new TypeError("net")]);
++  await t.outbox.add(rec(1));
++  assert.equal(await t.up.step(), "retry");
++  assert.equal(t.store.all().length, 1);
++  assert.equal(t.statuses.at(-1).state, "retry");
++});
++
++test("500 keeps the record and returns retry", async () => {
++  const t = setup([resp(500, "boom")]);
++  await t.outbox.add(rec(1));
++  assert.equal(await t.up.step(), "retry");
++  assert.equal(t.store.all().length, 1);
++});
++
++test("backoff goes 1,2,4,8,16,30,30 s, and resets after success", async () => {
++  const t = setup([resp(503), resp(503), resp(503), resp(503), resp(503), resp(503), resp(503), resp(201), resp(503)]);
++  await t.outbox.add(rec(1));
++  await t.outbox.add(rec(2));
++  for (let i = 0; i < 7; i++) assert.equal(await t.up.step(), "retry");
++  assert.deepEqual(t.sleeps, [1000, 2000, 4000, 8000, 16000, 30000, 30000]);
++  assert.equal(await t.up.step(), "sent");
++  assert.equal(await t.up.step(), "retry");
++  assert.equal(t.sleeps.at(-1), 1000);
++});
++
++test("401 and 403 return auth, keep the record, and stop sending until resume", async () => {
++  for (const code of [401, 403]) {
++    const t = setup([resp(code), resp(201)]);
++    await t.outbox.add(rec(1));
++    assert.equal(await t.up.step(), "auth");
++    assert.equal(t.statuses.at(-1).state, "auth");
++    assert.equal(await t.up.step(), "auth");
++    assert.equal(t.calls.length, 1);
++    assert.equal(t.store.all().length, 1);
++    t.up.resume({ ...card, token: "new" });
++    assert.equal(await t.up.step(), "sent");
++    assert.equal(t.calls[1].init.headers.Authorization, "Bearer new");
++    assert.equal(t.store.all().length, 0);
++  }
++});
++
++test("400 marks rejected with OperationOutcome text and moves to next", async () => {
++  const oo = { resourceType: "OperationOutcome", issue: [{ details: { text: "bad data" } }, { details: { text: "second" } }] };
++  const t = setup([resp(400, oo), resp(201)]);
++  await t.outbox.add(rec(1));
++  await t.outbox.add(rec(2));
++  assert.equal(await t.up.step(), "rejected");
++  assert.equal(t.store.all().length, 2);
++  assert.equal(t.statuses.at(-1).lastRejectedReason, "bad data");
++  assert.equal(await t.up.step(), "sent");
++  assert.equal(t.calls[1].init.headers["If-None-Exist"], "identifier=id-2");
++  assert.equal(t.store.all().length, 1);
++  assert.equal(t.statuses.at(-1).confirmed, 1);
++});
++
++test("400 with a non-JSON body gives reason 'HTTP 400'", async () => {
++  const t = setup([resp(400, "<html>")]);
++  await t.outbox.add(rec(1));
++  assert.equal(await t.up.step(), "rejected");
++  assert.equal(t.statuses.at(-1).lastRejectedReason, "HTTP 400");
++  assert.equal(t.store.all()[0].reason, "HTTP 400");
++});
++
++test("chunks are sent oldest first, one at a time", async () => {
++  const t = setup([resp(201)]);
++  for (const n of [1, 2, 3]) await t.outbox.add(rec(n));
++  await t.up.step(); await t.up.step(); await t.up.step();
++  assert.deepEqual(t.calls.map((c) => c.init.headers["If-None-Exist"]),
++    ["identifier=id-1", "identifier=id-2", "identifier=id-3"]);
++});
++
++test("other session's chunks are skipped and counted", async () => {
++  const t = setup([resp(201)]);
++  await t.outbox.add(rec(1, sessionKey(card2)));
++  assert.equal(await t.up.step(), "idle");
++  assert.equal(t.calls.length, 0);
++  assert.deepEqual(await t.outbox.counts(sessionKey(card)), { pending: 0, rejected: 0, otherSession: 1 });
++});
++
++test("resume with their card sends them", async () => {
++  const t = setup([resp(201)]);
++  await t.outbox.add(rec(1, sessionKey(card2)));
++  t.up.resume(card2);
++  assert.equal(await t.up.step(), "sent");
++  assert.equal(t.calls[0].init.headers.Authorization, "Bearer tok2");
++  assert.equal(t.store.all().length, 0);
++});
+diff --git a/tests/test_capture_e2e.py b/tests/test_capture_e2e.py
+new file mode 100644
+index 0000000..960fdb4
+--- /dev/null
++++ b/tests/test_capture_e2e.py
+@@ -0,0 +1,47 @@
++"""Chunk round trip: simulated lines -> real JS parser/chunker/builder -> real server."""
++import json
++import subprocess
++from pathlib import Path
++
++from fastapi.testclient import TestClient
++
++from fhir_server.app import create_app
++from fhir_server.config import Settings
++from test_cli_capture_session import SECRET, card_of, seeded  # noqa: F401
++
++FIXTURE = Path(__file__).resolve().parent.parent / "receiver/tests/fixtures/make_chunk.mjs"
++CODE_TO_CHANNEL = {"i-voltage": "I", "q-voltage": "Q", "accel-x": "ax",
++                   "accel-y": "ay", "accel-z": "az", "gyro-x": "gx",
++                   "gyro-y": "gy", "gyro-z": "gz"}
++
++
++def test_chunk_round_trip(seeded):  # noqa: F811
++    card = card_of(seeded)
++    # No skip: a missing node must fail this test, not hide the contract.
++    p = subprocess.run(["node", str(FIXTURE), json.dumps(card)],
++                       capture_output=True, text=True)
++    assert p.returncode == 0, p.stderr
++    made = json.loads(p.stdout)
++    obs, identifier, expected = made["observation"], made["identifier"], made["expected"]
++    assert any("E" in v for v in expected["I"]), "fixture must include a gap"
++
++    app = create_app(Settings(db_path=seeded["db"], jwt_secret=SECRET))
++    auth = {"Authorization": f"Bearer {card['token']}"}
++
++    def post():
++        return c.post("/fhir-r4/v1/Observation", json=obs,
++                      headers={**auth, "If-None-Exist": f"identifier={identifier}"})
++
++    with TestClient(app) as c:
++        r1 = post()
++        assert r1.status_code == 201, r1.text
++        r2 = post()
++        assert r2.status_code == 200, r2.text
++        assert r2.json()["id"] == r1.json()["id"]
++        stored = c.get(f"/fhir-r4/v1/Observation/{r1.json()['id']}",
++                       headers=auth).json()
++    assert len(stored["component"]) == 8
++    for comp in stored["component"]:
++        channel = CODE_TO_CHANNEL[comp["code"]["coding"][0]["code"]]
++        got = comp["valueSampledData"]["data"].split(" ")
++        assert got == expected[channel], channel
+diff --git a/tests/test_cli_capture_session.py b/tests/test_cli_capture_session.py
+new file mode 100644
+index 0000000..9ad5daa
+--- /dev/null
++++ b/tests/test_cli_capture_session.py
+@@ -0,0 +1,109 @@
++import json
++import os
++import re
++
++import pytest
++from fastapi.testclient import TestClient
++
++from fhir_server.app import create_app
++from fhir_server.config import Settings
++from fhir_server.repositories import resources
++from test_cli_seed import run_cli
++from test_rules_observation import raw
++
++SECRET = "cap-secret-0123456789-0123456789abcdef"
++
++
++@pytest.fixture
++def seeded(tmp_path):
++    db = str(tmp_path / "cap.db")
++    env = {"FHIR_DB_PATH": db, "FHIR_JWT_SECRET": SECRET,
++           "FHIR_ADMIN_PASSWORD": "admin-pass-1"}
++    p = run_cli(["seed", "--reset"], env)
++    assert p.returncode == 0, p.stderr
++    return {"db": db, "env": env, "seed": json.loads(p.stdout.splitlines()[-1])}
++
++
++def card_of(seeded, label="S001"):
++    p = run_cli(["capture-session", "--label", label], seeded["env"])
++    assert p.returncode == 0, p.stderr
++    return json.loads(p.stdout.strip().splitlines()[-1])
++
++
++def count(seeded, type_):
++    from fhir_server import db as db_mod
++    return len(resources.list(db_mod.connect(seeded["db"]), type_))
++
++
++def test_card_has_all_fields_and_references(seeded):
++    card = card_of(seeded)
++    assert set(card) == {"token", "patient", "encounter", "device", "org",
++                         "label"}
++    assert card["label"] == "S001"
++    assert card["token"]
++    assert re.fullmatch(r"Patient/\S+", card["patient"])
++    assert re.fullmatch(r"Encounter/\S+", card["encounter"])
++    assert card["device"] == f"Device/{seeded['seed']['device_id']}"
++    assert card["org"] == seeded["seed"]["org_id"]
++
++
++def test_card_can_post_a_raw_chunk(seeded):
++    card = card_of(seeded)
++    app = create_app(Settings(db_path=seeded["db"], jwt_secret=SECRET))
++    body = raw(subject={"reference": card["patient"]},
++               encounter={"reference": card["encounter"]},
++               device={"reference": card["device"]},
++               identifier=[{"system": "http://sys-ids.kemkes.go.id/observation/"
++                                      + card["org"], "value": "cap-1-0"}])
++    with TestClient(app) as c:
++        r = c.post("/fhir-r4/v1/Observation", json=body,
++                   headers={"Authorization": f"Bearer {card['token']}"})
++        assert r.status_code == 201, r.text
++
++
++def test_doctor_can_read_the_chunk(seeded):
++    card = card_of(seeded)
++    app = create_app(Settings(db_path=seeded["db"], jwt_secret=SECRET))
++    body = raw(subject={"reference": card["patient"]},
++               encounter={"reference": card["encounter"]},
++               device={"reference": card["device"]},
++               identifier=[{"system": "http://sys-ids.kemkes.go.id/observation/"
++                                      + card["org"], "value": "cap-1-0"}])
++    with TestClient(app) as c:
++        r = c.post("/fhir-r4/v1/Observation", json=body,
++                   headers={"Authorization": f"Bearer {card['token']}"})
++        assert r.status_code == 201, r.text
++        oid = r.json()["id"]
++        t = c.post("/auth/token", json={"username": "doctor",
++                                        "password": "doctor-pw"})
++        got = c.get(f"/fhir-r4/v1/Observation/{oid}", headers={
++            "Authorization": f"Bearer {t.json()['access_token']}"})
++        assert got.status_code == 200, got.text
++
++
++def test_two_sessions_get_different_patients(seeded):
++    a = card_of(seeded, "A")
++    b = card_of(seeded, "B")
++    assert a["patient"] != b["patient"]
++    assert a["encounter"] != b["encounter"]
++
++
++def test_same_label_twice_succeeds(seeded):
++    a = card_of(seeded, "S001")
++    b = card_of(seeded, "S001")
++    assert a["encounter"] != b["encounter"]
++
++
++def test_unseeded_db_exits_1_with_message(tmp_path):
++    env = {"FHIR_DB_PATH": str(tmp_path / "empty.db"),
++           "FHIR_JWT_SECRET": SECRET}
++    p = run_cli(["capture-session", "--label", "S001"], env)
++    assert p.returncode == 1 and "seed" in p.stderr
++
++
++@pytest.mark.parametrize("label", ["a b", "", "x" * 33])
++def test_bad_label_rejected(seeded, label):
++    before = (count(seeded, "Patient"), count(seeded, "Encounter"))
++    p = run_cli(["capture-session", "--label", label], seeded["env"])
++    assert p.returncode != 0
++    assert before == (count(seeded, "Patient"), count(seeded, "Encounter"))
+diff --git a/tests/test_conditional_create.py b/tests/test_conditional_create.py
+new file mode 100644
+index 0000000..6da7920
+--- /dev/null
++++ b/tests/test_conditional_create.py
+@@ -0,0 +1,225 @@
++import json
++import os
++import subprocess
++import sys
++
++import pytest
++from fastapi.testclient import TestClient
++
++from fhir_server.app import create_app
++from fhir_server.config import Settings
++from fhir_server.repositories import resources
++from fhir_server.validation.rules_observation import RAW_CODE, RAW_SYSTEM
++
++SECRET = "cc-secret-0123456789-0123456789abcdef"
++UCUM = "http://unitsofmeasure.org"
++URL = "/fhir-r4/v1/Observation"
++COMPONENTS = [("i-voltage", "V"), ("q-voltage", "V"),
++              ("accel-x", "[g]"), ("accel-y", "[g]"), ("accel-z", "[g]"),
++              ("gyro-x", "deg/s"), ("gyro-y", "deg/s"), ("gyro-z", "deg/s")]
++
++
++def _comp(code, unit):
++    return {"code": {"coding": [{"system": RAW_SYSTEM, "code": code}]},
++            "valueSampledData": {
++                "origin": {"value": 0, "unit": unit, "system": UCUM,
++                           "code": unit},
++                "period": 10, "dimensions": 1, "data": "1.65 1.66 1.67"}}
++
++
++def _login(c, u, pw):
++    r = c.post("/auth/token", json={"username": u, "password": pw})
++    assert r.status_code == 200, r.text
++    return {"Authorization": f"Bearer {r.json()['access_token']}"}
++
++
++@pytest.fixture
++def env(db_path):
++    e = dict(os.environ, FHIR_DB_PATH=db_path, FHIR_JWT_SECRET=SECRET,
++             FHIR_ADMIN_PASSWORD="adm-pw")
++    p = subprocess.run([sys.executable, "-m", "fhir_server", "seed", "--reset"],
++                       capture_output=True, text=True, env=e, cwd=os.getcwd())
++    assert p.returncode == 0, p.stderr
++    s = json.loads(p.stdout.strip().splitlines()[-1])
++    app = create_app(Settings(db_path=db_path, jwt_secret=SECRET))
++    with TestClient(app) as c:
++        admin = _login(c, "admin", s["admin_password"])
++        doc = _login(c, "doctor", s["doctor_password"])
++        r = c.post("/fhir-r4/v1/Encounter", headers=doc, json={
++            "resourceType": "Encounter",
++            "identifier": [{"use": "official",
++                            "system": "http://sys-ids.kemkes.go.id/encounter/"
++                                      f"{s['org_id']}",
++                            "value": "KUNJ-CC"}],
++            "status": "arrived",
++            "statusHistory": [{"status": "arrived", "period": {
++                "start": "2026-09-29T10:00:00+00:00"}}],
++            "class": {"system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
++                      "code": "AMB", "display": "ambulatory"},
++            "subject": {"reference": f"Patient/{s['patient_id']}"},
++            "period": {"start": "2026-09-29T10:00:00+00:00"},
++            "location": [{"location": {
++                "reference": f"Location/{s['location_id']}"}}],
++            "serviceProvider": {"reference": f"Organization/{s['org_id']}"},
++        })
++        assert r.status_code == 201, r.text
++        enc = r.json()
++        enc_id = enc["id"]
++        enc["status"] = "in-progress"
++        enc["statusHistory"] = [
++            {"status": "arrived",
++             "period": {"start": "2026-09-29T10:00:00+00:00"}},
++            {"status": "in-progress",
++             "period": {"start": "2026-09-29T10:05:00+00:00"}}]
++        r = c.put(f"/fhir-r4/v1/Encounter/{enc_id}", headers=doc, json=enc)
++        assert r.status_code == 200, r.text
++        r = c.post(f"/fhir-r4/v1/Device/{s['device_id']}/$provision",
++                   headers=admin, json={"patient": f"Patient/{s['patient_id']}"})
++        dev_tok = {"Authorization": f"Bearer {r.json()['token']}"}
++        # a second device assigned to the same patient
++        resources.put(c.app.state.conn, "Device", "dev-other",
++                      {"resourceType": "Device", "id": "dev-other",
++                       "status": "active"})
++        r = c.post("/fhir-r4/v1/Device/dev-other/$provision", headers=admin,
++                   json={"patient": f"Patient/{s['patient_id']}"})
++        assert r.status_code == 200, r.text
++        other_tok = {"Authorization": f"Bearer {r.json()['token']}"}
++        yield {"c": c, "s": s, "enc_id": enc_id, "dev": dev_tok,
++               "other": other_tok, "admin": admin, "doc": doc}
++
++
++def chunk(env, value="cap-1-0", device=None):
++    s = env["s"]
++    return {
++        "resourceType": "Observation", "status": "final",
++        "code": {"coding": [{"system": RAW_SYSTEM, "code": RAW_CODE,
++                             "display": "Raw radar I/Q capture"}]},
++        "subject": {"reference": f"Patient/{s['patient_id']}"},
++        "encounter": {"reference": f"Encounter/{env['enc_id']}"},
++        "effectiveDateTime": "2026-09-29T10:06:00+00:00",
++        "device": {"reference": f"Device/{device or s['device_id']}"},
++        "identifier": [{"system": "http://sys-ids.kemkes.go.id/observation/"
++                                  f"{s['org_id']}", "value": value}],
++        "component": [_comp(c, u) for c, u in COMPONENTS],
++    }
++
++
++def post(env, body, who="dev", header=None):
++    h = dict(env[who])
++    if header is not None:
++        h["If-None-Exist"] = header
++    return env["c"].post(URL, headers=h, json=body)
++
++
++def count(env):
++    return len(resources.list(env["c"].app.state.conn, "Observation"))
++
++
++def test_first_post_201_second_200_same_id(env):
++    r1 = post(env, chunk(env), header="identifier=cap-1-0")
++    r2 = post(env, chunk(env), header="identifier=cap-1-0")
++    assert r1.status_code == 201, r1.text
++    assert r2.status_code == 200, r2.text
++    assert r1.json()["id"] == r2.json()["id"]
++
++
++def test_second_post_stores_no_new_row(env):
++    post(env, chunk(env), header="identifier=cap-1-0")
++    post(env, chunk(env), header="identifier=cap-1-0")
++    assert count(env) == 1
++
++
++def test_system_pipe_value_form_matches_value_only_key(env):
++    post(env, chunk(env), header="identifier=cap-1-0")
++    sysv = "http://sys-ids.kemkes.go.id/observation/" + env["s"]["org_id"]
++    r = post(env, chunk(env), header=f"identifier={sysv}|cap-1-0")
++    assert r.status_code == 200, r.text
++
++
++def test_retry_after_encounter_finished_returns_200(env):
++    r1 = post(env, chunk(env), header="identifier=cap-1-0")
++    assert r1.status_code == 201
++    c, doc = env["c"], env["doc"]
++    e = c.get(f"/fhir-r4/v1/Encounter/{env['enc_id']}", headers=doc).json()
++    e["status"] = "finished"
++    e["statusHistory"] = e["statusHistory"] + [
++        {"status": "finished",
++         "period": {"start": "2026-09-29T10:05:00+00:00",
++                    "end": "2026-09-29T11:00:00+00:00"}}]
++    e["period"]["end"] = "2026-09-29T11:00:00+00:00"
++    assert c.put(f"/fhir-r4/v1/Encounter/{env['enc_id']}", headers=doc,
++                 json=e).status_code == 200
++    r2 = post(env, chunk(env), header="identifier=cap-1-0")
++    assert r2.status_code == 200, r2.text
++    assert r2.json()["id"] == r1.json()["id"]
++
++
++def test_other_device_gets_403_not_the_record(env):
++    post(env, chunk(env), header="identifier=cap-1-0")
++    r = post(env, chunk(env, device="dev-other"), who="other",
++             header="identifier=cap-1-0")
++    assert r.status_code == 403, r.text
++    assert r.json()["resourceType"] == "OperationOutcome"
++    assert "component" not in r.text
++
++
++def test_header_param_other_than_identifier_400(env):
++    r = post(env, chunk(env), header="code=cap-1-0")
++    assert r.status_code == 400
++
++
++@pytest.mark.parametrize("h", ["identifier", "identifier=", "identifier=a&identifier=b"])
++def test_malformed_header_400(env, h):
++    r = post(env, chunk(env), header=h)
++    assert r.status_code == 400
++    assert r.json()["resourceType"] == "OperationOutcome"
++
++
++def test_header_value_not_in_payload_400(env):
++    r = post(env, chunk(env, value="cap-1-0"), header="identifier=cap-9-9")
++    assert r.status_code == 400
++    assert count(env) == 0
++
++
++def test_non_observation_type_400(env):
++    r = env["c"].post("/fhir-r4/v1/Organization",
++                      headers={**env["admin"], "If-None-Exist": "identifier=x"},
++                      json={"resourceType": "Organization", "name": "K",
++                            "identifier": [{"value": "x"}]})
++    assert r.status_code == 400
++
++
++def test_invalid_payload_400_records_no_key(env):
++    bad = chunk(env)
++    bad["component"] = bad["component"][1:]  # drops i-voltage
++    r = post(env, bad, header="identifier=cap-1-0")
++    assert r.status_code == 400
++    r = post(env, chunk(env), header="identifier=cap-1-0")
++    assert r.status_code == 201, r.text
++
++
++def test_key_of_deleted_resource_creates_again(env):
++    r1 = post(env, chunk(env), header="identifier=cap-1-0")
++    d = env["c"].delete(f"{URL}/{r1.json()['id']}", headers=env["admin"])
++    assert d.status_code == 204
++    r2 = post(env, chunk(env), header="identifier=cap-1-0")
++    assert r2.status_code == 201, r2.text
++    assert r2.json()["id"] != r1.json()["id"]
++
++
++def test_plain_post_may_reuse_identifier(env):
++    assert post(env, chunk(env, value="radar-1")).status_code == 201
++    assert post(env, chunk(env, value="radar-1")).status_code == 201
++
++
++def test_plain_post_ignores_conditional_keys(env):
++    assert post(env, chunk(env, value="radar-1"),
++                header="identifier=radar-1").status_code == 201
++    assert post(env, chunk(env, value="radar-1")).status_code == 201
++    assert count(env) == 2
++
++
++def test_capability_statement_advertises_conditional_create(env):
++    body = env["c"].get("/fhir-r4/v1/metadata").json()
++    obs = [r for r in body["rest"][0]["resource"] if r["type"] == "Observation"][0]
++    assert obs["conditionalCreate"] is True
+diff --git a/tests/test_routes.py b/tests/test_routes.py
+index 486044b..28fcd1e 100644
+--- a/tests/test_routes.py
++++ b/tests/test_routes.py
+@@ -145,10 +145,20 @@ def test_delete_honours_accept_406(client):
+     assert r.status_code == 406
+ 
+ 
+ def test_account_ref_must_exist(client):
+     tok = admin_token(client)
+     r = client.post("/fhir-r4/v1/admin/accounts", headers=hdr(tok),
+                     json={"username": "doc-bad", "password": "pw",
+                           "role": "doctor", "ref": "Practitioner/NOPE"})
+     assert r.status_code == 400
+     assert r.json()["resourceType"] == "OperationOutcome"
++
++
++def test_capture_page_served(client):
++    r = client.get("/capture/")
++    assert r.status_code == 200 and "Raw signal" in r.text
++
++
++def test_capture_module_has_js_mime(client):
++    r = client.get("/capture/src/jsonlines.js")
++    assert r.status_code == 200 and "javascript" in r.headers["content-type"]
+diff --git a/tests/test_rules_observation.py b/tests/test_rules_observation.py
+index 89b6159..cd5508d 100644
+--- a/tests/test_rules_observation.py
++++ b/tests/test_rules_observation.py
+@@ -69,10 +69,169 @@ def test_subject_must_match_assignment():
+     assert any(i.rule_number == 20005 for i in validate_observation(p, **kw()))
+ 
+ 
+ def test_identifier_system_forms_accepted():
+     for sys_ in (f"http://sys-ids.kemkes.go.id/observation/{ORG}",
+                  f"http://sys-ids.kemkes.go.id/organization/{ORG}"):
+         p = valid(identifier=[{"system": sys_, "value": "x"}])
+         assert validate_observation(p, **kw()) == []
+     p = valid(identifier=[{"system": "http://evil", "value": "x"}])
+     assert any(i.rule_number == 10117 for i in validate_observation(p, **kw()))
++
++
++# ---- raw radar capture chunks ----
++from fhir_server.validation.rules_observation import RAW_SYSTEM, RAW_CODE
++
++UCUM = "http://unitsofmeasure.org"
++RAW_COMPONENTS = [("i-voltage", "V"), ("q-voltage", "V"),
++                  ("accel-x", "[g]"), ("accel-y", "[g]"), ("accel-z", "[g]"),
++                  ("gyro-x", "deg/s"), ("gyro-y", "deg/s"), ("gyro-z", "deg/s")]
++
++
++def comp(code, unit, data="1.65 1.66 1.67", period=10):
++    return {"code": {"coding": [{"system": RAW_SYSTEM, "code": code}]},
++            "valueSampledData": {
++                "origin": {"value": 0, "unit": unit, "system": UCUM, "code": unit},
++                "period": period, "dimensions": 1, "data": data}}
++
++
++def raw(**kw):
++    p = {
++        "resourceType": "Observation",
++        "status": "final",
++        "code": {"coding": [{"system": RAW_SYSTEM, "code": RAW_CODE,
++                             "display": "Raw radar I/Q capture"}]},
++        "subject": {"reference": PAT},
++        "encounter": {"reference": ENC},
++        "effectiveDateTime": NOW,
++        "device": {"reference": DEV},
++        "identifier": [{"system": f"http://sys-ids.kemkes.go.id/observation/{ORG}",
++                        "value": "cap-1-0"}],
++        "component": [comp(c, u) for c, u in RAW_COMPONENTS],
++    }
++    p.update(kw)
++    return p
++
++
++def raw_data(data, **kw):
++    return raw(component=[comp(c, u, data=data) for c, u in RAW_COMPONENTS], **kw)
++
++
++def errs(p, **extra):
++    return validate_observation(p, **{**kw(), **extra})
++
++
++def has_obs_issue(issues):
++    return bool(issues) and any(i.expression.startswith("Observation") for i in issues)
++
++
++def test_raw_capture_valid():
++    assert errs(raw()) == []
++
++
++def test_raw_accepts_error_tokens():
++    assert errs(raw_data("1.65 E -0.5")) == []
++    assert errs(raw_data("L U 2")) == []
++
++
++def test_raw_requires_i_and_q():
++    p = raw(component=[comp(c, u) for c, u in RAW_COMPONENTS if c != "q-voltage"])
++    assert has_obs_issue(errs(p))
++
++
++def test_raw_rejects_unknown_component_code():
++    comps = [comp(c, u) for c, u in RAW_COMPONENTS] + [comp("bogus", "V")]
++    assert has_obs_issue(errs(raw(component=comps)))
++
++
++def test_raw_rejects_duplicate_component_code():
++    comps = [comp(c, u) for c, u in RAW_COMPONENTS] + [comp("accel-x", "[g]")]
++    assert has_obs_issue(errs(raw(component=comps)))
++
++
++def test_raw_rejects_top_level_value():
++    p = raw(valueQuantity={"value": 72, "system": UCUM, "code": "/min"})
++    assert has_obs_issue(errs(p))
++
++
++def test_raw_rejects_non_sampled_component():
++    comps = [comp(c, u) for c, u in RAW_COMPONENTS]
++    comps[2] = {"code": comps[2]["code"],
++                "valueQuantity": {"value": 1, "system": UCUM, "code": "[g]"}}
++    assert has_obs_issue(errs(raw(component=comps)))
++
++
++def test_raw_rejects_dimensions_not_one():
++    comps = [comp(c, u) for c, u in RAW_COMPONENTS]
++    comps[0]["valueSampledData"]["dimensions"] = 2
++    assert has_obs_issue(errs(raw(component=comps)))
++
++
++def test_raw_rejects_period_zero():
++    p = raw(component=[comp(c, u, period=0) for c, u in RAW_COMPONENTS])
++    assert has_obs_issue(errs(p))
++
++
++def test_raw_rejects_mismatched_period():
++    comps = [comp(c, u) for c, u in RAW_COMPONENTS]
++    comps[3]["valueSampledData"]["period"] = 20
++    assert has_obs_issue(errs(raw(component=comps)))
++
++
++def test_raw_rejects_mismatched_sample_count():
++    comps = [comp(c, u) for c, u in RAW_COMPONENTS]
++    comps[4]["valueSampledData"]["data"] = "1 2"
++    assert has_obs_issue(errs(raw(component=comps)))
++
++
++def test_raw_rejects_bad_token():
++    assert has_obs_issue(errs(raw_data("1.65 abc")))
++
++
++def test_raw_rejects_nan_token():
++    assert has_obs_issue(errs(raw_data("1.65 NaN")))
++
++
++def test_raw_accepts_exponent_token():
++    assert errs(raw_data("1e-7")) == []
++    assert errs(raw_data("1.5E+3 -2e5")) == []
++
++
++def test_raw_rejects_over_1000_samples():
++    assert has_obs_issue(errs(raw_data(" ".join(["1"] * 1001))))
++
++
++def test_raw_accepts_exactly_1000_samples():
++    assert errs(raw_data(" ".join(["1"] * 1000))) == []
++
++
++def test_raw_rejects_empty_data():
++    assert has_obs_issue(errs(raw_data("")))
++
++
++def test_raw_requires_exactly_one_identifier():
++    assert has_obs_issue(errs(raw(identifier=[])))
++    ident = {"system": f"http://sys-ids.kemkes.go.id/observation/{ORG}", "value": "a"}
++    assert has_obs_issue(errs(raw(identifier=[ident, dict(ident, value="b")])))
++
++
++def test_raw_requires_identifier_value():
++    p = raw(identifier=[{"system": f"http://sys-ids.kemkes.go.id/observation/{ORG}"}])
++    assert has_obs_issue(errs(p))
++
++
++def test_raw_keeps_device_rule():
++    p = raw(device={"reference": "Device/other"})
++    assert any(i.rule_number == 20005 for i in errs(p))
++
++
++def test_raw_keeps_finished_encounter_rule():
++    enc = {"status": "finished", "subject": {"reference": PAT}}
++    issues = errs(raw(), encounter_getter=lambda ref: enc)
++    assert any(i.rule_number == 20005 and i.expression == "Observation.encounter"
++               for i in issues)
++
++
++def test_heart_rate_code_still_required_for_other_codes():
++    p = valid()
++    p["code"] = {"coding": [{"system": "http://loinc.org", "code": "29463-7"}]}
++    assert any(i.rule_number == 10001 for i in errs(p))

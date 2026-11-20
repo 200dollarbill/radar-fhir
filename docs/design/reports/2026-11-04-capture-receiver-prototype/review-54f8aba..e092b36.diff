@@ -1,0 +1,234 @@
+# Review package: 54f8aba..e092b36
+
+## Commits
+e092b36 fix(receiver): close serial port after pipe ends; throttle status refresh
+
+## Files changed
+ receiver/app.js                 | 12 ++++++++----
+ receiver/src/coalesce.js        | 21 +++++++++++++++++++++
+ receiver/src/serial.js          |  6 +++++-
+ receiver/tests/coalesce.test.js | 42 +++++++++++++++++++++++++++++++++++++++++
+ 4 files changed, 76 insertions(+), 5 deletions(-)
+
+## Diff
+diff --git a/receiver/app.js b/receiver/app.js
+index 1f35c45..f59ea06 100644
+--- a/receiver/app.js
++++ b/receiver/app.js
+@@ -1,18 +1,19 @@
+ // Page wiring only. Logic lives in src/.
+ import { parseCard } from "./src/card.js";
+ import { Outbox, IndexedDbStore, sessionKey } from "./src/outbox.js";
+ import { Uploader } from "./src/uploader.js";
+ import { Capture } from "./src/capture.js";
+ import { simulatorLines } from "./src/simulator.js";
+ import { serialLines } from "./src/serial.js";
+ import { Trace, draw } from "./src/plot.js";
++import { coalesce } from "./src/coalesce.js";
+ 
+ const $ = (id) => document.getElementById(id);
+ const outbox = new Outbox(new IndexedDbStore());
+ const trace = new Trace();
+ 
+ let card = null;
+ let uploader = null;
+ let abort = null;
+ let stats = { samples: 0, gaps: 0, rejected: 0 };
+ let up = { confirmed: 0, lastRejectedReason: null, state: "idle" };
+@@ -32,24 +33,27 @@ async function refresh() {
+   if (counts.rejected > 0) {
+     notes.push(`${counts.rejected} chunks rejected by the server` +
+       (up.lastRejectedReason ? `; latest reason: ${up.lastRejectedReason}` : "") + ".");
+   }
+   if (counts.otherSession > 0) {
+     notes.push(`${counts.otherSession} chunks belong to another session. Paste that session's card to send them.`);
+   }
+   $("notes").textContent = notes.join(" ");
+ }
+ 
++// At most ~4 refreshes a second and never two at once: counts() clones the whole outbox.
++const scheduleRefresh = coalesce(refresh, 250);
++
+ function onUploadStatus(s) {
+   up = s;
+   if (s.state === "auth") showError("Token invalid. Paste a new card.");
+-  refresh();
++  scheduleRefresh();
+ }
+ 
+ function setRunning(on, simulated = false) {
+   running = on;
+   $("stop").disabled = !on;
+   $("connect").disabled = on || !navigator.serial;
+   $("simulate").disabled = on;
+   $("simulated").hidden = !(on && simulated);
+ }
+ 
+@@ -63,21 +67,21 @@ function useCard() {
+     return;
+   }
+   card = parsed;
+   try { sessionStorage.setItem("prata-card", $("card").value); } catch { /* storage unavailable */ }
+   $("card-label").textContent = `Using card: ${card.label}`;
+   if (uploader) uploader.resume(card);
+   else {
+     uploader = new Uploader({ outbox, fetchFn: (...a) => fetch(...a), card, onStatus: onUploadStatus });
+     uploader.start();
+   }
+-  refresh();
++  scheduleRefresh();
+ }
+ 
+ async function startCapture(kind) {
+   showError("");
+   if (!card) { showError("Paste the session card and click Use card first."); return; }
+   abort = new AbortController();
+   const { signal } = abort;
+   let lines;
+   if (kind === "sim") {
+     lines = simulatorLines({ signal });
+@@ -87,35 +91,35 @@ async function startCapture(kind) {
+       lines = serialLines(port, { signal });
+     } catch (e) {
+       showError(`Could not open serial port: ${e.message}`);
+       return;
+     }
+   }
+   const capture = new Capture({
+     outbox, sessionKey: sessionKey(card), card,
+     source: kind === "sim" ? "SIMULATED" : "serial",
+     onSample: (s) => { trace.push(s.I, s.Q); draw($("plot"), trace); },
+-    onStatus: (st) => { stats = st; refresh(); },
++    onStatus: (st) => { stats = st; scheduleRefresh(); },
+   });
+   setRunning(true, kind === "sim");
+   try {
+     const result = await capture.run(lines);
+     if (result === "disconnected") showError("Disconnected. Click Connect to resume.");
+     else if (result === "quota") {
+       showError("Browser storage is full. Capture stopped. The unsaved partial chunk was lost.");
+     }
+   } catch (e) {
+     showError(`Capture failed: ${e.message}`);
+   } finally {
+     abort = null;
+     setRunning(false);
+-    refresh();
++    scheduleRefresh();
+   }
+ }
+ 
+ $("use-card").addEventListener("click", useCard);
+ $("connect").addEventListener("click", () => startCapture("serial"));
+ $("simulate").addEventListener("click", () => startCapture("sim"));
+ $("stop").addEventListener("click", () => { abort?.abort(); });
+ 
+ if (!navigator.serial) {
+   $("connect").disabled = true;
+diff --git a/receiver/src/coalesce.js b/receiver/src/coalesce.js
+new file mode 100644
+index 0000000..1d915af
+--- /dev/null
++++ b/receiver/src/coalesce.js
+@@ -0,0 +1,21 @@
++// Returns schedule(): runs async fn at most once per ms, never two at once.
++// Calls made while a run or timer is pending collapse into one later run.
++export function coalesce(fn, ms, { setTimer = setTimeout } = {}) {
++  let timer = null;
++  let running = false;
++  let dirty = false;
++  const arm = () => {
++    if (timer !== null || running) return;
++    timer = setTimer(fire, ms);
++  };
++  async function fire() {
++    timer = null;
++    running = true;
++    dirty = false;
++    try { await fn(); } finally {
++      running = false;
++      if (dirty) arm();
++    }
++  }
++  return () => { dirty = true; arm(); };
++}
+diff --git a/receiver/src/serial.js b/receiver/src/serial.js
+index 37ccf49..190f7b9 100644
+--- a/receiver/src/serial.js
++++ b/receiver/src/serial.js
+@@ -1,22 +1,26 @@
+ // Web Serial line source. Yields text lines until the signal aborts or the device is lost.
+ import { LineSplitter } from "./jsonlines.js";
+ 
+ export async function* serialLines(port, { baudRate = 115200, signal } = {}) {
+   await port.open({ baudRate });
+-  const reader = port.readable.pipeThrough(new TextDecoderStream()).getReader();
++  const decoder = new TextDecoderStream();
++  // Keep the pipe promise: the port stays locked until the pipe has finished closing.
++  const piped = port.readable.pipeTo(decoder.writable).catch(() => {});
++  const reader = decoder.readable.getReader();
+   const stop = () => { reader.cancel().catch(() => {}); };
+   signal?.addEventListener("abort", stop, { once: true });
+   if (signal?.aborted) stop();
+   const splitter = new LineSplitter();
+   try {
+     for (;;) {
+       const { value, done } = await reader.read(); // a device-lost error propagates
+       if (done) return;
+       for (const line of splitter.push(value)) yield line;
+     }
+   } finally {
+     signal?.removeEventListener("abort", stop);
+     try { await reader.cancel(); } catch { /* already closed or errored */ }
++    await piped; // readable is unlocked now, so close() can succeed
+     try { await port.close(); } catch { /* device may be gone */ }
+   }
+ }
+diff --git a/receiver/tests/coalesce.test.js b/receiver/tests/coalesce.test.js
+new file mode 100644
+index 0000000..ba7ffa4
+--- /dev/null
++++ b/receiver/tests/coalesce.test.js
+@@ -0,0 +1,42 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import { coalesce } from "../src/coalesce.js";
++
++function fakeTimers() {
++  const pending = [];
++  return { setTimer: (f) => { pending.push(f); return pending.length; }, pending };
++}
++
++test("many calls before the timer fires run fn once", async () => {
++  const t = fakeTimers();
++  let n = 0;
++  const schedule = coalesce(async () => { n++; }, 250, t);
++  for (let k = 0; k < 100; k++) schedule();
++  assert.equal(t.pending.length, 1);
++  await t.pending.shift()();
++  assert.equal(n, 1);
++  assert.equal(t.pending.length, 0);
++});
++
++test("never runs two at once; a call during a run triggers one later run", async () => {
++  const t = fakeTimers();
++  let active = 0, maxActive = 0, runs = 0;
++  let release;
++  const schedule = coalesce(async () => {
++    runs++; active++; maxActive = Math.max(maxActive, active);
++    await new Promise((r) => { release = r; });
++    active--;
++  }, 250, t);
++  schedule();
++  const first = t.pending.shift()();
++  schedule(); schedule();
++  assert.equal(t.pending.length, 0);
++  release();
++  await first;
++  assert.equal(t.pending.length, 1);
++  const second = t.pending.shift()();
++  release();
++  await second;
++  assert.equal(runs, 2);
++  assert.equal(maxActive, 1);
++});

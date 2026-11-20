@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Review</title>
+<link rel="stylesheet" href="site.css">
+<style>
+  canvas.method-plot { height: 120px; }
+  canvas#iq { width: 220px; height: 220px; }
+  .method { margin: .75rem 0; }
+  .method h3 { margin: 0 0 .2rem; font-size: 1rem; }
+  .method p { margin: .2rem 0; color: var(--muted); font-size: .9rem; }
+  .default h3::after { content: " (page default)"; color: var(--accent); font-weight: normal; }
+  .controls input[type=range] { width: 20rem; max-width: 100%; }
+</style>
+</head>
+<body>
+<nav class="top" id="topnav" aria-label="Site">
+  <span class="brand">PRATA</span>
+  <ul><li><a href="sessions.html">Sessions</a></li><li><a href="./">Capture</a></li><li><a href="review.html" aria-current="page">Review</a></li></ul>
+  <span class="user"><a href="sessions.html">Log in</a></span>
+</nav>
+<main>
+<p id="load-error" class="notice warn" role="alert" hidden></p>
+<h1>Review</h1>
+<p><strong>Display processing only. Not a measurement result or a clinical finding.</strong>
+Compares the six ways of turning raw I/Q into a movement waveform on the same 10 s window.
+Waveforms are in relative units.</p>
+
+<section class="panel row controls">
+  <label>Recording file (firmware CSV or FHIR Bundle JSON)
+    <input type="file" id="file" accept=".csv,.json,text/csv,application/json,application/fhir+json">
+  </label>
+  <label for="start">Window start <span id="start-label">0 s</span></label>
+  <input type="range" id="start" min="0" max="0" step="1" value="0" disabled>
+  <label for="band">Pulse band</label>
+  <select id="band">
+    <option value="wide">0.5 to 10 Hz</option>
+    <option value="narrow">0.7 to 3 Hz</option>
+  </select>
+</section>
+<p id="summary">No recording loaded.</p>
+<p id="error" class="error" role="alert"></p>
+<p><span class="swatch" style="background:#1b6ec2"></span>pulse band
+   <span class="swatch" style="background:#c2571b; margin-left:1rem"></span>breathing band (0.1 to 0.5 Hz)</p>
+<canvas id="iq" width="220" height="220" aria-label="I/Q plane of the window"></canvas>
+<div id="methods" class="panel"></div>
+</main>
+<script src="guard.js"></script>
+<script type="module" src="review.js"></script>
+</body>
+</html>

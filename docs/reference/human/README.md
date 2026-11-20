@@ -33,6 +33,8 @@ The files are grouped by subject: SATUSEHAT first (files 01–05, what the Indon
 | 15 | `15-fhir-workflow.md` | FHIR R4 workflow patterns — how Observation/Procedure/Condition/Encounter reference each other |
 | — | `validity-review.md` | What was checked, the systemic issues, the conflicts found, and what that means for building the server |
 
+| 16 | `16-project-proposal-brief.md` | CDSS website goal, completed walking skeleton, SATUSEHAT/FHIR relationship, methodology, optional profile checklist, roadmap, and prompts for drafting the owner's proposal |
+
 ## Re-checking freshness
 
 The raw pages can go stale (playbook revisions, spec updates). To check whether the scraped copies in `raw/` still match what is currently published, run:

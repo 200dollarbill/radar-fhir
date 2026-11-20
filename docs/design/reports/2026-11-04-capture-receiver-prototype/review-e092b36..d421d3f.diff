@@ -1,0 +1,228 @@
+# Review package: e092b36..d421d3f
+
+## Commits
+d421d3f test(receiver): chunk round trip through the real server, and run guide
+
+## Files changed
+ CLAUDE.md                              |  6 +++++
+ fhir_server/README.md                  | 21 +++++++++++++++
+ receiver/tests/fixtures/make_chunk.mjs | 37 ++++++++++++++++++++++++++
+ tests/test_capture_e2e.py              | 47 ++++++++++++++++++++++++++++++++++
+ 4 files changed, 111 insertions(+)
+
+## Diff
+diff --git a/CLAUDE.md b/CLAUDE.md
+index efb07ff..5bf9c18 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -32,20 +32,24 @@ do not reopen it.
+ ## Status
+ 
+ - **Reference compilation: done.** See below.
+ - **FHIR R4 server: walking skeleton implemented, and the base the website builds on.**
+   Proves admin-provision → doctor-opened Encounter → device heart-rate Observation →
+   doctor read → patient own-record, with local JWT roles, device tokens,
+   SATUSEHAT-shaped OperationOutcome validation and compile-gated firmware. Spec:
+   `docs/.superpowers/specs/2026-09-29-fhir-r4-server-walking-skeleton-design.md`.
+ - **Public exposure and request history:** spec written, not implemented
+   (`docs/.superpowers/specs/2026-10-08-public-exposure-request-history-design.md`).
++- **Raw capture receiver: prototype.** A browser page at `/capture/` posts raw radar
++  chunks to the server. Tested end to end with the simulator (round trip through the
++  real server); the browser and hardware paths are not yet verified. Run guide:
++  `fhir_server/README.md`.
+ - **Firmware heart-rate values are placeholders**, not radar-derived measurements.
+ - The old roadmap's device profile is no longer the headline goal. Add a profile only
+   if the website design needs one.
+ 
+ "SATUSEHAT-compatible" means following the Indonesian national platform's profiles,
+ identifier systems and terminology while running entirely locally. We never call the
+ hosted platform. Registration, API keys, Postman, DICOM and KYC are out of scope.
+ 
+ ## Repo map
+ 
+@@ -55,20 +59,21 @@ docs/proposal_md/               proposal.md, citations, source and claim catalog
+ docs/proposal_guide/            how to write the proposal (style rules)
+ docs/presentation/ets/          sidang outline, fishbone.md
+ docs/notul/                     consultation notes
+ docs/papers/                    papers by subject (PDF + md/); search/ = literature results
+ docs/reference/raw/             93 scraped pages + FETCH-LOG.md: evidence, never hand-edit
+ docs/reference/claude/          31 dense FHIR/SATUSEHAT files + INDEX.md: what YOU load
+ docs/reference/human/           prose guides for the project owner
+ docs/.superpowers/{specs,plans} specs and implementation plans
+ fhir_server/, tests/            server and its tests (run guide: fhir_server/README.md)
+ device_client/, arduino/        Python device client, firmware
++receiver/                       browser raw-capture page (plain JS) and its Node tests
+ .tools/scrape/                  scraper, staleness check, view linter, 34 tests
+ ```
+ 
+ **For FHIR or SATUSEHAT facts start at `docs/reference/claude/INDEX.md`.** Load the two
+ or three files a task needs. Every `claude/*.md` ends with `## Sources`. **Trace, don't
+ guess:** claude → its Sources → raw. A fact only in `human/` is not evidence.
+ `build.fhir.org` is the R6 CI build; SATUSEHAT is R4, and `hl7.org/fhir/R4/` binds us.
+ 
+ ## Findings that constrain the server
+ 
+@@ -96,20 +101,21 @@ without running it.
+ - **Review for fidelity.** When output derives from a source, the review re-derives a
+   sample from that source.
+ - **Hand artifacts over as files**, passed by path.
+ - **Record contradictions verbatim; resolve them in a ruling.**
+ - **Cheap model for transcription, capable model for judgement.** Name the model.
+ 
+ ## Commands
+ 
+ ```bash
+ .venv/bin/python -m pytest tests -q          # server tests
++node --test "receiver/tests/*.test.js"       # receiver tests
+ python3 -m pytest .tools/scrape/tests -q     # 34 tests
+ python3 .tools/scrape/lint_views.py          # must print "0 problem(s)"
+ python3 .tools/scrape/check.py               # detect upstream doc drift (~3 min, network)
+ ```
+ 
+ ## Conventions
+ 
+ - Never hand-edit `docs/reference/raw/`. Keep `claude/*.md` ≤ 400 lines with `## Sources`
+   and an `INDEX.md` line (the linter enforces this).
+ - Indonesian terms stay in Indonesian with an English gloss on first use.
+diff --git a/fhir_server/README.md b/fhir_server/README.md
+index 06746d0..9499cc1 100644
+--- a/fhir_server/README.md
++++ b/fhir_server/README.md
+@@ -27,20 +27,41 @@ root, from `tests/`, or as a direct script run.
+ 
+ `seed --reset` wipes and rebuilds the DB, then prints a JSON summary on its
+ **last stdout line**: `admin_password`, `doctor_password`, `patient_password`,
+ `device_token`, `org_id`, `location_id`, `practitioner_id`, `patient_id`,
+ `device_id`. (Passwords come from `FHIR_ADMIN_PASSWORD` / `FHIR_DOCTOR_PASSWORD`
+ / `FHIR_PATIENT_PASSWORD`, or are generated and printed once.)
+ 
+ If `FHIR_JWT_SECRET` is unset, `seed`/`serve` generate one and append it to
+ `.env` (process-local fallback if that file cannot be written).
+ 
++## Raw capture receiver (prototype)
++
++A browser page at `/capture/` reads the radar's JSON lines (from the simulator,
++or from the board over Web Serial in Chrome), cuts them into chunks of at most
++1000 samples and posts each chunk as a `raw-capture` Observation. Simulator
++runs are marked `SIMULATED`. Use a scratch database, and do not run
++`seed --reset` on a database you want to keep (it wipes it).
++
++```bash
++export FHIR_JWT_SECRET=<choose> FHIR_ADMIN_PASSWORD=<choose>
++export FHIR_DB_PATH=/tmp/capture-scratch.db      # or put --db <path> before the subcommand
++.venv/bin/python -m fhir_server seed --reset
++.venv/bin/python -m fhir_server capture-session --label S001   # prints a one-line JSON card
++.venv/bin/python -m fhir_server serve --port 8000
++```
++
++`--db` is a top-level option, so it goes before the subcommand:
++`python -m fhir_server --db /tmp/x.db capture-session --label S001`. The label
++takes 1 to 32 letters, digits or hyphens. Open `http://127.0.0.1:8000/capture/`
++in Chrome and paste the card. Node tests: `node --test "receiver/tests/*.test.js"`.
++
+ ## Endpoints
+ 
+ | Method + path | Auth | Purpose |
+ |---|---|---|
+ | `POST /auth/token` | none | `{username, password}` → `{access_token, token_type, expires_in}` |
+ | `GET /fhir-r4/v1/metadata` | none | CapabilityStatement (fhirVersion 4.0.1) |
+ | `POST /fhir-r4/v1/{Type}` | Bearer | create (201 + Location + ETag) |
+ | `GET /fhir-r4/v1/{Type}/{id}` | Bearer | read (200 + ETag) |
+ | `PUT /fhir-r4/v1/{Type}/{id}` | Bearer | full update (200 + ETag) |
+ | `DELETE /fhir-r4/v1/{Type}/{id}` | Bearer | delete (204; admin only) |
+diff --git a/receiver/tests/fixtures/make_chunk.mjs b/receiver/tests/fixtures/make_chunk.mjs
+new file mode 100644
+index 0000000..1a10ccc
+--- /dev/null
++++ b/receiver/tests/fixtures/make_chunk.mjs
+@@ -0,0 +1,37 @@
++// Usage: node make_chunk.mjs '<card JSON>'
++// Prints {"observation", "identifier", "expected"} for one chunk that includes a gap.
++// Lines go through formatLine, the real parser, the real chunker and the real builder.
++import { formatLine } from "../../src/simulator.js";
++import { parseLine } from "../../src/jsonlines.js";
++import { Chunker } from "../../src/chunker.js";
++import { buildObservation, identifierValue } from "../../src/observation.js";
++
++const card = JSON.parse(process.argv[2]);
++const captureId = "cap-e2e-fixture";
++const FS = 100;
++const GAP = [10, 11]; // sample indexes the "device" never sent
++const N = 20;
++const CHANNELS = ["I", "Q", "ax", "ay", "az", "gx", "gy", "gz"];
++
++const chunks = [];
++const chunker = new Chunker({ now: () => 1_700_000_000_000, onChunk: (c) => chunks.push(c) });
++const expected = Object.fromEntries(CHANNELS.map((c) => [c, []]));
++
++for (let i = 0; i < N; i++) {
++  const values = { I: 1.5 + i * 0.01, Q: 1.8 - i * 0.01, ax: 0.1 * i, ay: -0.05 * i, az: 1, gx: i, gy: -i, gz: 0 };
++  if (GAP.includes(i)) {
++    for (const c of CHANNELS) expected[c].push("E");
++    continue;
++  }
++  // Expected tokens come from the wire format (6 decimals) independently of the chunker.
++  for (const c of CHANNELS) expected[c].push(String(Number(values[c].toFixed(6))));
++  const parsed = parseLine(formatLine(i, FS, values));
++  if (parsed.kind !== "sample") throw new Error(`line ${i} not a sample`);
++  chunker.addSample(parsed.sample);
++}
++chunker.flush();
++if (chunks.length !== 1) throw new Error(`expected 1 chunk, got ${chunks.length}`);
++
++const observation = buildObservation(chunks[0], card, { captureId, source: "SIMULATED" });
++const identifier = `http://sys-ids.kemkes.go.id/organization/${card.org}|${identifierValue(captureId, chunks[0])}`;
++console.log(JSON.stringify({ observation, identifier, expected }));
+diff --git a/tests/test_capture_e2e.py b/tests/test_capture_e2e.py
+new file mode 100644
+index 0000000..960fdb4
+--- /dev/null
++++ b/tests/test_capture_e2e.py
+@@ -0,0 +1,47 @@
++"""Chunk round trip: simulated lines -> real JS parser/chunker/builder -> real server."""
++import json
++import subprocess
++from pathlib import Path
++
++from fastapi.testclient import TestClient
++
++from fhir_server.app import create_app
++from fhir_server.config import Settings
++from test_cli_capture_session import SECRET, card_of, seeded  # noqa: F401
++
++FIXTURE = Path(__file__).resolve().parent.parent / "receiver/tests/fixtures/make_chunk.mjs"
++CODE_TO_CHANNEL = {"i-voltage": "I", "q-voltage": "Q", "accel-x": "ax",
++                   "accel-y": "ay", "accel-z": "az", "gyro-x": "gx",
++                   "gyro-y": "gy", "gyro-z": "gz"}
++
++
++def test_chunk_round_trip(seeded):  # noqa: F811
++    card = card_of(seeded)
++    # No skip: a missing node must fail this test, not hide the contract.
++    p = subprocess.run(["node", str(FIXTURE), json.dumps(card)],
++                       capture_output=True, text=True)
++    assert p.returncode == 0, p.stderr
++    made = json.loads(p.stdout)
++    obs, identifier, expected = made["observation"], made["identifier"], made["expected"]
++    assert any("E" in v for v in expected["I"]), "fixture must include a gap"
++
++    app = create_app(Settings(db_path=seeded["db"], jwt_secret=SECRET))
++    auth = {"Authorization": f"Bearer {card['token']}"}
++
++    def post():
++        return c.post("/fhir-r4/v1/Observation", json=obs,
++                      headers={**auth, "If-None-Exist": f"identifier={identifier}"})
++
++    with TestClient(app) as c:
++        r1 = post()
++        assert r1.status_code == 201, r1.text
++        r2 = post()
++        assert r2.status_code == 200, r2.text
++        assert r2.json()["id"] == r1.json()["id"]
++        stored = c.get(f"/fhir-r4/v1/Observation/{r1.json()['id']}",
++                       headers=auth).json()
++    assert len(stored["component"]) == 8
++    for comp in stored["component"]:
++        channel = CODE_TO_CHANNEL[comp["code"]["coding"][0]["code"]]
++        got = comp["valueSampledData"]["data"].split(" ")
++        assert got == expected[channel], channel

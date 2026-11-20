@@ -1,0 +1,428 @@
+# Review package: 59518e4..e646f8d
+
+## Commits
+e646f8d feat(receiver): durable outbox and retrying uploader
+
+## Files changed
+ receiver/src/outbox.js          |  85 +++++++++++++++++++++++
+ receiver/src/uploader.js        | 106 ++++++++++++++++++++++++++++
+ receiver/tests/outbox.test.js   |  52 ++++++++++++++
+ receiver/tests/uploader.test.js | 148 ++++++++++++++++++++++++++++++++++++++++
+ 4 files changed, 391 insertions(+)
+
+## Diff
+diff --git a/receiver/src/outbox.js b/receiver/src/outbox.js
+new file mode 100644
+index 0000000..9281284
+--- /dev/null
++++ b/receiver/src/outbox.js
+@@ -0,0 +1,85 @@
++// Durable outbox: records stay until the server confirms them (see uploader.js).
++// Store interface: put(record) -> id, update(record), delete(id), all() -> record[] in id order.
++// Store methods may be sync or async; Outbox awaits them.
++
++export function sessionKey(card) {
++  return `${card.patient}|${card.device}`;
++}
++
++export class MemoryStore {
++  constructor() { this._rows = new Map(); this._next = 1; }
++  put(record) {
++    const id = this._next++;
++    this._rows.set(id, { ...record, id });
++    return id;
++  }
++  update(record) { this._rows.set(record.id, { ...record }); }
++  delete(id) { this._rows.delete(id); }
++  all() { return [...this._rows.values()].sort((a, b) => a.id - b.id); }
++}
++
++export class IndexedDbStore {
++  constructor(dbName = "prata-capture") {
++    this._dbName = dbName;
++    this._db = null;
++  }
++
++  async _open() {
++    if (this._db) return this._db;
++    this._db = await new Promise((resolve, reject) => {
++      const req = indexedDB.open(this._dbName, 1);
++      req.onupgradeneeded = () => req.result.createObjectStore("outbox", { keyPath: "id", autoIncrement: true });
++      req.onsuccess = () => resolve(req.result);
++      req.onerror = () => reject(req.error);
++    });
++    try { await navigator.storage?.persist?.(); } catch { /* refusal is fine */ }
++    return this._db;
++  }
++
++  async _tx(mode, fn) {
++    const db = await this._open();
++    return new Promise((resolve, reject) => {
++      const tx = db.transaction("outbox", mode);
++      const req = fn(tx.objectStore("outbox"));
++      tx.oncomplete = () => resolve(req.result);
++      tx.onerror = () => reject(tx.error);
++      tx.onabort = () => reject(tx.error);
++    });
++  }
++
++  put(record) { const { id, ...rest } = record; return this._tx("readwrite", (s) => s.add(rest)); }
++  update(record) { return this._tx("readwrite", (s) => s.put(record)); }
++  delete(id) { return this._tx("readwrite", (s) => s.delete(id)); }
++  all() { return this._tx("readonly", (s) => s.getAll()); }
++}
++
++export class Outbox {
++  constructor(store) { this.store = store; }
++
++  async add({ identifier, sessionKey: key, observation }) {
++    return await this.store.put({ identifier, sessionKey: key, observation, rejected: false, reason: null });
++  }
++
++  async nextFor(key) {
++    const rows = await this.store.all();
++    return rows.find((r) => r.sessionKey === key && !r.rejected) ?? null;
++  }
++
++  async remove(id) { await this.store.delete(id); }
++
++  async markRejected(id, reason) {
++    const row = (await this.store.all()).find((r) => r.id === id);
++    if (!row) return;
++    await this.store.update({ ...row, rejected: true, reason });
++  }
++
++  async counts(key) {
++    const c = { pending: 0, rejected: 0, otherSession: 0 };
++    for (const r of await this.store.all()) {
++      if (r.sessionKey !== key) c.otherSession++;
++      else if (r.rejected) c.rejected++;
++      else c.pending++;
++    }
++    return c;
++  }
++}
+diff --git a/receiver/src/uploader.js b/receiver/src/uploader.js
+new file mode 100644
+index 0000000..422da4f
+--- /dev/null
++++ b/receiver/src/uploader.js
+@@ -0,0 +1,106 @@
++// Sends outbox records one at a time. A record is deleted only after 200 or 201.
++
++import { sessionKey } from "./outbox.js";
++
++const BACKOFF_MS = [1000, 2000, 4000, 8000, 16000, 30000];
++const IDLE_MS = 500;
++
++export class Uploader {
++  constructor({ outbox, fetchFn, card, sleep, onStatus, baseUrl = "/fhir-r4/v1" }) {
++    this.outbox = outbox;
++    this.fetchFn = fetchFn;
++    this.card = card;
++    this.sleep = sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
++    this.onStatus = onStatus ?? (() => {});
++    this.baseUrl = baseUrl;
++    this.confirmed = 0;
++    this.lastRejectedReason = null;
++    this.failures = 0;
++    this.paused = false;
++    this.running = false;
++  }
++
++  _status(state) {
++    this.onStatus({ state, confirmed: this.confirmed, lastRejectedReason: this.lastRejectedReason });
++  }
++
++  async step() {
++    if (this.paused) return "auth";
++    const rec = await this.outbox.nextFor(sessionKey(this.card));
++    if (!rec) { this._status("idle"); return "idle"; }
++    this._status("sending");
++
++    let res;
++    try {
++      res = await this.fetchFn(`${this.baseUrl}/Observation`, {
++        method: "POST",
++        headers: {
++          Authorization: `Bearer ${this.card.token}`,
++          "Content-Type": "application/fhir+json",
++          Accept: "application/fhir+json",
++          "If-None-Exist": `identifier=${rec.identifier}`,
++        },
++        body: JSON.stringify(rec.observation),
++      });
++    } catch {
++      return await this._retry();
++    }
++
++    if (res.status === 200 || res.status === 201) {
++      await this.outbox.remove(rec.id);
++      this.confirmed++;
++      this.failures = 0;
++      this._status("sending");
++      return "sent";
++    }
++    if (res.status === 401 || res.status === 403) {
++      this.paused = true;
++      this._status("auth");
++      return "auth";
++    }
++    if (res.status >= 500) return await this._retry();
++
++    // Other 4xx (and anything unexpected): keep the record, mark it rejected.
++    const reason = await this._reason(res);
++    await this.outbox.markRejected(rec.id, reason);
++    this.lastRejectedReason = reason;
++    this._status("sending");
++    return "rejected";
++  }
++
++  async _reason(res) {
++    try {
++      const oo = JSON.parse(await res.text());
++      const text = (oo.issue ?? []).map((i) => i?.details?.text).find((t) => typeof t === "string" && t);
++      if (text) return text;
++    } catch { /* fall through */ }
++    return `HTTP ${res.status}`;
++  }
++
++  async _retry() {
++    const delay = BACKOFF_MS[Math.min(this.failures, BACKOFF_MS.length - 1)];
++    this.failures++;
++    this._status("retry");
++    await this.sleep(delay);
++    return "retry";
++  }
++
++  start() {
++    if (this.running) return;
++    this.running = true;
++    (async () => {
++      while (this.running) {
++        const r = await this.step();
++        if (r === "idle" || r === "auth") await this.sleep(IDLE_MS);
++      }
++    })();
++  }
++
++  stop() { this.running = false; }
++
++  resume(card) {
++    this.card = card;
++    this.paused = false;
++    this.failures = 0;
++  }
++}
+diff --git a/receiver/tests/outbox.test.js b/receiver/tests/outbox.test.js
+new file mode 100644
+index 0000000..97ded3c
+--- /dev/null
++++ b/receiver/tests/outbox.test.js
+@@ -0,0 +1,52 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import { Outbox, MemoryStore, sessionKey } from "../src/outbox.js";
++
++const card = { patient: "Patient/p1", device: "Device/d1" };
++const rec = (n, key = sessionKey(card)) => ({ identifier: `id-${n}`, sessionKey: key, observation: { n } });
++
++test("sessionKey joins patient and device", () => {
++  assert.equal(sessionKey(card), "Patient/p1|Device/d1");
++});
++
++test("nextFor returns the oldest pending record of that session", async () => {
++  const ob = new Outbox(new MemoryStore());
++  await ob.add(rec(1, "other"));
++  await ob.add(rec(2));
++  await ob.add(rec(3));
++  assert.equal((await ob.nextFor(sessionKey(card))).identifier, "id-2");
++  assert.equal(await ob.nextFor("none"), null);
++});
++
++test("records survive into a new Outbox on the same store", async () => {
++  const store = new MemoryStore();
++  await new Outbox(store).add(rec(1));
++  const next = await new Outbox(store).nextFor(sessionKey(card));
++  assert.equal(next.identifier, "id-1");
++});
++
++test("markRejected keeps the record, excluded from nextFor, counted as rejected", async () => {
++  const store = new MemoryStore();
++  const ob = new Outbox(store);
++  const a = await ob.add(rec(1));
++  await ob.add(rec(2));
++  await ob.add(rec(3, "other"));
++  await ob.markRejected(a, "bad");
++  assert.equal((await ob.nextFor(sessionKey(card))).identifier, "id-2");
++  assert.equal(store.all().length, 3);
++  assert.deepEqual(await ob.counts(sessionKey(card)), { pending: 1, rejected: 1, otherSession: 1 });
++});
++
++test("remove deletes the record", async () => {
++  const store = new MemoryStore();
++  const ob = new Outbox(store);
++  const a = await ob.add(rec(1));
++  await ob.remove(a);
++  assert.equal(store.all().length, 0);
++});
++
++test("add rejects with QuotaExceededError when the store throws it", async () => {
++  const store = new MemoryStore();
++  store.put = () => { throw new DOMException("full", "QuotaExceededError"); };
++  await assert.rejects(new Outbox(store).add(rec(1)), (e) => e.name === "QuotaExceededError");
++});
+diff --git a/receiver/tests/uploader.test.js b/receiver/tests/uploader.test.js
+new file mode 100644
+index 0000000..a2d9ae0
+--- /dev/null
++++ b/receiver/tests/uploader.test.js
+@@ -0,0 +1,148 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import { Outbox, MemoryStore, sessionKey } from "../src/outbox.js";
++import { Uploader } from "../src/uploader.js";
++
++const card = { token: "tok", patient: "Patient/p1", device: "Device/d1" };
++const card2 = { token: "tok2", patient: "Patient/p2", device: "Device/d2" };
++const rec = (n, key = sessionKey(card)) => ({ identifier: `id-${n}`, sessionKey: key, observation: { n } });
++const resp = (status, body) => ({ status, ok: status < 300, text: async () => (typeof body === "string" ? body : JSON.stringify(body ?? {})) });
++
++function setup(replies, c = card) {
++  const store = new MemoryStore();
++  const outbox = new Outbox(store);
++  const calls = [];
++  const sleeps = [];
++  const statuses = [];
++  const q = [...replies];
++  const fetchFn = async (url, init) => {
++    calls.push({ url, init, stored: store.all().length });
++    const r = q.length > 1 ? q.shift() : q[0];
++    if (r instanceof Error) throw r;
++    return r;
++  };
++  const up = new Uploader({ outbox, fetchFn, card: c, sleep: async (ms) => { sleeps.push(ms); },
++    onStatus: (s) => statuses.push(s) });
++  return { store, outbox, calls, sleeps, statuses, up };
++}
++
++test("POST sends Authorization, If-None-Exist: identifier=<value>, fhir+json", async () => {
++  const t = setup([resp(201)]);
++  await t.outbox.add(rec(1));
++  assert.equal(await t.up.step(), "sent");
++  const { url, init } = t.calls[0];
++  assert.equal(url, "/fhir-r4/v1/Observation");
++  assert.equal(init.method, "POST");
++  assert.equal(init.headers.Authorization, "Bearer tok");
++  assert.equal(init.headers["If-None-Exist"], "identifier=id-1");
++  assert.equal(init.headers["Content-Type"], "application/fhir+json");
++  assert.deepEqual(JSON.parse(init.body), { n: 1 });
++});
++
++test("201 and 200 both delete the record", async () => {
++  const t = setup([resp(201), resp(200)]);
++  await t.outbox.add(rec(1));
++  await t.outbox.add(rec(2));
++  assert.equal(await t.up.step(), "sent");
++  assert.equal(await t.up.step(), "sent");
++  assert.equal(t.store.all().length, 0);
++  assert.equal(await t.up.step(), "idle");
++  assert.equal(t.statuses.at(-1).confirmed, 2);
++});
++
++test("record stays until the response arrives", async () => {
++  const t = setup([resp(201)]);
++  await t.outbox.add(rec(1));
++  await t.up.step();
++  assert.equal(t.calls[0].stored, 1);
++  assert.equal(t.store.all().length, 0);
++});
++
++test("fetch throwing keeps the record and returns retry", async () => {
++  const t = setup([new TypeError("net")]);
++  await t.outbox.add(rec(1));
++  assert.equal(await t.up.step(), "retry");
++  assert.equal(t.store.all().length, 1);
++  assert.equal(t.statuses.at(-1).state, "retry");
++});
++
++test("500 keeps the record and returns retry", async () => {
++  const t = setup([resp(500, "boom")]);
++  await t.outbox.add(rec(1));
++  assert.equal(await t.up.step(), "retry");
++  assert.equal(t.store.all().length, 1);
++});
++
++test("backoff goes 1,2,4,8,16,30,30 s, and resets after success", async () => {
++  const t = setup([resp(503), resp(503), resp(503), resp(503), resp(503), resp(503), resp(503), resp(201), resp(503)]);
++  await t.outbox.add(rec(1));
++  await t.outbox.add(rec(2));
++  for (let i = 0; i < 7; i++) assert.equal(await t.up.step(), "retry");
++  assert.deepEqual(t.sleeps, [1000, 2000, 4000, 8000, 16000, 30000, 30000]);
++  assert.equal(await t.up.step(), "sent");
++  assert.equal(await t.up.step(), "retry");
++  assert.equal(t.sleeps.at(-1), 1000);
++});
++
++test("401 and 403 return auth, keep the record, and stop sending until resume", async () => {
++  for (const code of [401, 403]) {
++    const t = setup([resp(code), resp(201)]);
++    await t.outbox.add(rec(1));
++    assert.equal(await t.up.step(), "auth");
++    assert.equal(t.statuses.at(-1).state, "auth");
++    assert.equal(await t.up.step(), "auth");
++    assert.equal(t.calls.length, 1);
++    assert.equal(t.store.all().length, 1);
++    t.up.resume({ ...card, token: "new" });
++    assert.equal(await t.up.step(), "sent");
++    assert.equal(t.calls[1].init.headers.Authorization, "Bearer new");
++    assert.equal(t.store.all().length, 0);
++  }
++});
++
++test("400 marks rejected with OperationOutcome text and moves to next", async () => {
++  const oo = { resourceType: "OperationOutcome", issue: [{ details: { text: "bad data" } }, { details: { text: "second" } }] };
++  const t = setup([resp(400, oo), resp(201)]);
++  await t.outbox.add(rec(1));
++  await t.outbox.add(rec(2));
++  assert.equal(await t.up.step(), "rejected");
++  assert.equal(t.store.all().length, 2);
++  assert.equal(t.statuses.at(-1).lastRejectedReason, "bad data");
++  assert.equal(await t.up.step(), "sent");
++  assert.equal(t.calls[1].init.headers["If-None-Exist"], "identifier=id-2");
++  assert.equal(t.store.all().length, 1);
++  assert.equal(t.statuses.at(-1).confirmed, 1);
++});
++
++test("400 with a non-JSON body gives reason 'HTTP 400'", async () => {
++  const t = setup([resp(400, "<html>")]);
++  await t.outbox.add(rec(1));
++  assert.equal(await t.up.step(), "rejected");
++  assert.equal(t.statuses.at(-1).lastRejectedReason, "HTTP 400");
++  assert.equal(t.store.all()[0].reason, "HTTP 400");
++});
++
++test("chunks are sent oldest first, one at a time", async () => {
++  const t = setup([resp(201)]);
++  for (const n of [1, 2, 3]) await t.outbox.add(rec(n));
++  await t.up.step(); await t.up.step(); await t.up.step();
++  assert.deepEqual(t.calls.map((c) => c.init.headers["If-None-Exist"]),
++    ["identifier=id-1", "identifier=id-2", "identifier=id-3"]);
++});
++
++test("other session's chunks are skipped and counted", async () => {
++  const t = setup([resp(201)]);
++  await t.outbox.add(rec(1, sessionKey(card2)));
++  assert.equal(await t.up.step(), "idle");
++  assert.equal(t.calls.length, 0);
++  assert.deepEqual(await t.outbox.counts(sessionKey(card)), { pending: 0, rejected: 0, otherSession: 1 });
++});
++
++test("resume with their card sends them", async () => {
++  const t = setup([resp(201)]);
++  await t.outbox.add(rec(1, sessionKey(card2)));
++  t.up.resume(card2);
++  assert.equal(await t.up.step(), "sent");
++  assert.equal(t.calls[0].init.headers.Authorization, "Bearer tok2");
++  assert.equal(t.store.all().length, 0);
++});

@@ -152,3 +152,37 @@ def test_account_ref_must_exist(client):
                           "role": "doctor", "ref": "Practitioner/NOPE"})
     assert r.status_code == 400
     assert r.json()["resourceType"] == "OperationOutcome"
+
+
+def test_capture_page_served(client):
+    r = client.get("/capture/")
+    assert r.status_code == 200 and "Raw signal" in r.text
+
+
+def test_capture_module_has_js_mime(client):
+    r = client.get("/capture/src/jsonlines.js")
+    assert r.status_code == 200 and "javascript" in r.headers["content-type"]
+
+
+PUBLIC_COPY = "Account management is only available on the PRATA laptop."
+
+
+@pytest.mark.parametrize("path", ["/fhir-r4/v1/admin/accounts",
+                                  "/fhir-r4/v1/admin%2Faccounts"])
+def test_admin_routes_refuse_requests_from_the_public_site(client, path):
+    """The Worker marks every forwarded request X-PRATA-Public: 1. A path trick
+    that gets past the Worker still meets this refusal, even with an admin token."""
+    tok = admin_token(client)
+    before = len(accounts.list_all(client.app.state.conn))
+    h = {**hdr(tok), "X-PRATA-Public": "1"}
+    r = client.post(path, headers=h, json={"username": "backdoor", "password": "pw",
+                                           "role": "admin", "ref": None})
+    assert r.status_code == 403
+    assert r.json()["issue"][0]["details"]["text"].startswith(PUBLIC_COPY)
+    assert client.get(path, headers=h).status_code == 403
+    assert len(accounts.list_all(client.app.state.conn)) == before
+
+
+def test_admin_routes_still_work_on_the_laptop(client):
+    tok = admin_token(client)
+    assert client.get("/fhir-r4/v1/admin/accounts", headers=hdr(tok)).status_code == 200
