@@ -262,12 +262,14 @@ pages and publishes them (about 15 seconds). Server changes only need a restart 
    Claude Code, or run it in a terminal.
 4. The tunnel `prata-laptop` (ID `595af04e-6869-424e-aee0-bc138bb101d2`) and the Workers
    VPC service `prata-laptop` (ID in `hosting/wrangler.jsonc`) already exist in the
-   Cloudflare account. A new laptop only needs the tunnel's token in `.env/prata.env`:
+   Cloudflare account. A new laptop only needs the tunnel's token in `.env/prata.env`.
+   After step 3, run:
    ```bash
-   export CLOUDFLARE_TUNNEL_TOKEN=<token>
+   make tunnel-token
    ```
-   The token is shown with the tunnel `prata-laptop` in the Cloudflare dashboard. It is a
-   secret: never paste it into a chat, a commit or a document.
+   It asks Cloudflare for the token with your Wrangler login and writes (or replaces) the
+   line `export CLOUDFLARE_TUNNEL_TOKEN=...` in `.env/prata.env`, without showing it. The
+   token is a secret: never paste it into a chat, a commit or a document.
 5. `make deploy`.
 
 ## Troubleshooting
@@ -288,7 +290,7 @@ pages and publishes them (about 15 seconds). Server changes only need a restart 
 | *PRATA server is offline (laptop off or tunnel down)* (hosted site) | The laptop is off, or `make server` or `make tunnel` is not running | Start both. Chunks recorded meanwhile wait in the browser and upload by themselves |
 | *Login failed: Too many login attempts. Try again in a minute.* | Many logins from one address in a short time (hosted site) | Wait a minute, then log in with the right password |
 | 403 *Account management is only available on the PRATA laptop.* | The account API was called through the hosted site | Use the account commands on the laptop (`docs/accounts/README.md`) |
-| `make tunnel` says *CLOUDFLARE_TUNNEL_TOKEN is not set*, or the tunnel never connects | The token is missing or wrong in `.env/prata.env` | Copy the token again (Hosted site, step 4), then `make tunnel` |
+| `make tunnel` says *CLOUDFLARE_TUNNEL_TOKEN is not set*, or the tunnel never connects | The token is missing or wrong in `.env/prata.env` | `make tunnel-token`, then `make tunnel` |
 
 ## Where things are saved
 

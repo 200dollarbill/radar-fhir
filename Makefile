@@ -5,7 +5,7 @@ PY   := .venv/bin/python
 ENV  := .env/prata.env
 
 .DEFAULT_GOAL := help
-.PHONY: help setup server test firmware flash eval tunnel deploy
+.PHONY: help setup server test firmware flash eval tunnel tunnel-token deploy
 
 help: ## list commands
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-10s %s\n", $$1, $$2}'
@@ -38,6 +38,9 @@ eval: ## rescore the display methods (rewrites docs/eval/)
 tunnel: ## connect this laptop to Cloudflare (keep running next to `make server`)
 	@test -f $(ENV) || { echo "missing $(ENV): see README.md, Secrets"; exit 1; }
 	. ./$(ENV) && { test -n "$$CLOUDFLARE_TUNNEL_TOKEN" || { echo "CLOUDFLARE_TUNNEL_TOKEN is not set in $(ENV)"; exit 1; }; } && TUNNEL_TOKEN="$$CLOUDFLARE_TUNNEL_TOKEN" cloudflared tunnel run
+
+tunnel-token: ## put the tunnel's token into .env/prata.env (needs wrangler login)
+	cd hosting && node tunnel-token.mjs
 
 deploy: ## build the website and deploy the Worker
 	cd hosting && npm run deploy

@@ -13,9 +13,11 @@ You need Python 3.12+, Node 22 and `make`. From the repo root:
    make setup
    ```
 
-2. Make your secrets file (once). The folder `.env/` is never committed:
+2. Make your secrets file (once; **skip this if `.env/prata.env` already exists**, because
+   `cat >` replaces the whole file). The folder `.env/` is never committed:
 
    ```bash
+   mkdir -p .env
    cat > .env/prata.env <<'EOF'
    export FHIR_JWT_SECRET=pick-any-long-random-string
    export FHIR_ADMIN_PASSWORD=pick-an-admin-password
@@ -87,6 +89,7 @@ make firmware   compile the board firmware
 make flash      compile and upload to the board (PORT=/dev/ttyACM0)
 make eval       rescore the display methods (rewrites docs/eval/)
 make tunnel     connect this laptop to Cloudflare (keep running next to `make server`)
+make tunnel-token put the tunnel's token into .env/prata.env (needs wrangler login)
 make deploy     build the website and deploy the Worker
 ```
 

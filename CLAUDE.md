@@ -163,6 +163,7 @@ make firmware    # arduino-cli compile --fqbn "$FQBN" firmware/radar_json
 make flash       # compile, then arduino-cli upload -p /dev/ttyACM0 (override: PORT=...)
                  # FQBN = m5stack:esp32:m5stack_atoms3r:USBMode=hwcdc,CDCOnBoot=cdc
 make tunnel      # TUNNEL_TOKEN from .env/prata.env → cloudflared tunnel run (hosted site)
+make tunnel-token # hosting/tunnel-token.mjs: token via wrangler login → .env/prata.env, never printed
 make deploy      # hosting/: node build.mjs && wrangler deploy → https://prata.haifa.workers.dev
 python3 tools/scrape/check.py   # detect upstream doc drift (~3 min, network)
 
