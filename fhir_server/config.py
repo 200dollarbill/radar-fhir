@@ -12,7 +12,7 @@ class Settings:
     @classmethod
     def from_env(cls, **overrides):
         base = dict(
-            db_path=os.environ.get("FHIR_DB_PATH", "fhir_server.db"),
+            db_path=os.environ.get("FHIR_DB_PATH", "data/fhir_server.db"),
             jwt_secret=os.environ.get("FHIR_JWT_SECRET", ""),
             jwt_ttl_seconds=int(os.environ.get("FHIR_JWT_TTL", "3600")),
             earliest_date=os.environ.get("FHIR_EARLIEST_DATE", "2014-06-03"),

@@ -15,6 +15,13 @@ from .deps import get_principal
 router = APIRouter(prefix="/fhir-r4/v1/admin", tags=["admin"])
 
 
+def _laptop_only(request: Request):
+    """The Cloudflare Worker sets X-PRATA-Public on everything it forwards.
+    Account management is refused for those, whatever the path looked like."""
+    if request.headers.get("X-PRATA-Public"):
+        raise AuthzError("Account management is only available on the PRATA laptop.")
+
+
 def _err(exc):
     return JSONResponse(status_code=exc.status, content=to_outcome(exc.issues),
                         media_type="application/fhir+json")
@@ -23,6 +30,7 @@ def _err(exc):
 @router.post("/accounts")
 async def create_account(request: Request):
     try:
+        _laptop_only(request)
         principal = get_principal(request)
         if principal.kind != "admin":
             raise AuthzError("Only admins may manage accounts")
@@ -75,6 +83,7 @@ async def create_account(request: Request):
 @router.get("/accounts")
 async def list_accounts(request: Request):
     try:
+        _laptop_only(request)
         principal = get_principal(request)
         if principal.kind != "admin":
             raise AuthzError("Only admins may manage accounts")

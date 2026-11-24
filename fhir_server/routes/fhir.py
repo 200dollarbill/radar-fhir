@@ -97,8 +97,16 @@ async def create(type_: str, request: Request):
         _check_media(request)
         _check_type(type_)
         svc, principal = get_service(request), get_principal(request)
-        rid, doc, version = svc.create(principal, type_,
-                                       await _payload(request))
+        payload = await _payload(request)
+        cond = request.headers.get("If-None-Exist")
+        if cond is not None:
+            rid, doc, created = svc.conditional_create(principal, type_,
+                                                       payload, cond)
+            version = res.get_version(svc.conn, type_, rid) or 1
+            return _json(doc, status=201 if created else 200, headers={
+                "Location": f"/fhir-r4/v1/{type_}/{rid}",
+                "ETag": f'W/"{version}"'})
+        rid, doc, version = svc.create(principal, type_, payload)
         return _json(doc, status=201, headers={
             "Location": f"/fhir-r4/v1/{type_}/{rid}",
             "ETag": f'W/"{version}"'})

@@ -1,0 +1,593 @@
+# Review package: d421d3f..6cce071
+
+## Commits
+6cce071 fix(receiver): final review findings (uploader loop, serial open, banner, retry notes, docs)
+
+## Files changed
+ CLAUDE.md                                          |  5 +-
+ ...2026-11-04-capture-receiver-prototype-design.md |  8 +++-
+ fhir_server/README.md                              |  2 +
+ receiver/app.js                                    | 25 +++++++---
+ receiver/index.html                                |  2 +-
+ receiver/src/capture.js                            |  4 +-
+ receiver/src/outbox.js                             |  5 +-
+ receiver/src/serial.js                             |  9 ++--
+ receiver/src/uploader.js                           | 18 +++++--
+ receiver/tests/capture.test.js                     |  6 +++
+ receiver/tests/uploader.test.js                    | 55 ++++++++++++++++++++++
+ 11 files changed, 117 insertions(+), 22 deletions(-)
+
+## Diff
+diff --git a/CLAUDE.md b/CLAUDE.md
+index 5bf9c18..3988178 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -33,22 +33,23 @@ do not reopen it.
+ 
+ - **Reference compilation: done.** See below.
+ - **FHIR R4 server: walking skeleton implemented, and the base the website builds on.**
+   Proves admin-provision → doctor-opened Encounter → device heart-rate Observation →
+   doctor read → patient own-record, with local JWT roles, device tokens,
+   SATUSEHAT-shaped OperationOutcome validation and compile-gated firmware. Spec:
+   `docs/.superpowers/specs/2026-09-29-fhir-r4-server-walking-skeleton-design.md`.
+ - **Public exposure and request history:** spec written, not implemented
+   (`docs/.superpowers/specs/2026-10-08-public-exposure-request-history-design.md`).
+ - **Raw capture receiver: prototype.** A browser page at `/capture/` posts raw radar
+-  chunks to the server. Tested end to end with the simulator (round trip through the
+-  real server); the browser and hardware paths are not yet verified. Run guide:
++  chunks to the server. The simulator path passed in real headless Chrome, including a
++  server kill and restart with no duplicates or lost samples. Web Serial and hardware
++  are unverified. Run guide:
+   `fhir_server/README.md`.
+ - **Firmware heart-rate values are placeholders**, not radar-derived measurements.
+ - The old roadmap's device profile is no longer the headline goal. Add a profile only
+   if the website design needs one.
+ 
+ "SATUSEHAT-compatible" means following the Indonesian national platform's profiles,
+ identifier systems and terminology while running entirely locally. We never call the
+ hosted platform. Registration, API keys, Postman, DICOM and KYC are out of scope.
+ 
+ ## Repo map
+diff --git a/docs/.superpowers/specs/2026-11-04-capture-receiver-prototype-design.md b/docs/.superpowers/specs/2026-11-04-capture-receiver-prototype-design.md
+index aaa071a..5ff801a 100644
+--- a/docs/.superpowers/specs/2026-11-04-capture-receiver-prototype-design.md
++++ b/docs/.superpowers/specs/2026-11-04-capture-receiver-prototype-design.md
+@@ -1,13 +1,13 @@
+ # Capture receiver and backend prototype: design
+ 
+-Date: 2026-11-04. Status: awaiting owner review.
++Date: 2026-11-04. Status: approved; implemented as prototype.
+ 
+ ## Purpose
+ 
+ A browser page reads raw radar samples from a board over USB serial, shows them
+ live, and uploads them to the FHIR server as Observations. This proves the path
+ device → connected computer → server for raw 100 Hz data. It is a pipeline
+ prototype, not a measurement: it produces no JVP result and no interpretation.
+ 
+ ## Scope
+ 
+@@ -185,21 +185,21 @@ chunks, so raw data needs no migration.
+ | `401` or `403` | Pause uploads, show "token invalid, paste a new card", keep chunks |
+ | Other `4xx` | Mark chunk rejected, keep it in the outbox, show the OperationOutcome text and count, move to the next chunk |
+ | Encounter no longer in progress | Rejected by the existing rule, handled as the row above |
+ | IndexedDB quota exceeded | Stop capture and show an error. Never drop data silently |
+ | Tab reopened with chunks pending | Page reports them and uploads after a card is pasted. Chunks already hold their references |
+ 
+ ## Testing
+ 
+ All TDD. Baseline before this work: 134 server tests pass.
+ 
+-- **Node (`node --test receiver/tests`):** parser, chunker (gap, reboot, `fs` change,
++- **Node (`node --test "receiver/tests/*.test.js"`):** parser, chunker (gap, reboot, `fs` change,
+   flush), Observation builder, outbox with an in-memory store, uploader response
+   classes with a fake `fetch`, simulator line format.
+ - **Contract:** a test feeds the simulator's lines and a line in the exact
+   `radar_json.ino` printf shape through the parser, so the formats cannot drift.
+ - **Pytest:** raw-capture rule accept and reject cases, conditional create (`201`
+   then `200`, other device `403`, bad header `400`), plain POST reuse of an identifier
+   still allowed, static route, `capture-session`. All existing tests stay green.
+ - **End to end (`tests/test_capture_e2e.py`):** Node builds a real chunk, the test
+   posts it twice, gets `201` then `200`, reads it back and compares every sample.
+ - **Manual browser check:** simulator in real Chrome through to stored Observations.
+@@ -219,20 +219,24 @@ proves the data path only. Its values are not radar signal and must not be repor
+ as such.
+ 
+ ## Known limits
+ 
+ - **USB output is unverified.** Native USB serial on the AtomS3R depends on the build
+   option `USB CDC On Boot`. If the port stays silent, check this first.
+ - **Search scales poorly.** `res.list` parses every stored Observation on each search,
+   and `_count` caps at 100 with no paging. Acceptable for this prototype. The dashboard
+   will need a summary or paged read.
+ - **The server PC must be running** to accept uploads. Chunks wait in the browser.
++- **Only full chunks reach the outbox,** so a crash or reload mid-capture loses up to 10 s.
++- **Create and key insert commit separately,** so a crash in that window can duplicate
++  one chunk on retry.
++- **Other-session or rejected chunks have no discard path.** Clear site data to remove them.
+ - **The RABITS firmware format differs** from what this page parses (below).
+ 
+ ## Later: RABITS BLE protocol
+ 
+ Static JADX reading of `com.rabits.app` v0.6.5, not tested on hardware. A future
+ `src/ble.js` plus an epoch parser would feed the same chunker. The prof's firmware
+ source would settle what is inferred here.
+ 
+ - **Connection:** device name contains `RABITS`. Service
+   `6e400001-b5a3-f393-e0a9-e50e24dcca9e`, RX write `…0002`, TX notify `…0003`, LIVE
+diff --git a/fhir_server/README.md b/fhir_server/README.md
+index 9499cc1..f5defce 100644
+--- a/fhir_server/README.md
++++ b/fhir_server/README.md
+@@ -47,20 +47,22 @@ export FHIR_JWT_SECRET=<choose> FHIR_ADMIN_PASSWORD=<choose>
+ export FHIR_DB_PATH=/tmp/capture-scratch.db      # or put --db <path> before the subcommand
+ .venv/bin/python -m fhir_server seed --reset
+ .venv/bin/python -m fhir_server capture-session --label S001   # prints a one-line JSON card
+ .venv/bin/python -m fhir_server serve --port 8000
+ ```
+ 
+ `--db` is a top-level option, so it goes before the subcommand:
+ `python -m fhir_server --db /tmp/x.db capture-session --label S001`. The label
+ takes 1 to 32 letters, digits or hyphens. Open `http://127.0.0.1:8000/capture/`
+ in Chrome and paste the card. Node tests: `node --test "receiver/tests/*.test.js"`.
++Verification: the simulator path passed in headless Chrome (including a server kill and
++restart); Web Serial and hardware are unverified.
+ 
+ ## Endpoints
+ 
+ | Method + path | Auth | Purpose |
+ |---|---|---|
+ | `POST /auth/token` | none | `{username, password}` → `{access_token, token_type, expires_in}` |
+ | `GET /fhir-r4/v1/metadata` | none | CapabilityStatement (fhirVersion 4.0.1) |
+ | `POST /fhir-r4/v1/{Type}` | Bearer | create (201 + Location + ETag) |
+ | `GET /fhir-r4/v1/{Type}/{id}` | Bearer | read (200 + ETag) |
+ | `PUT /fhir-r4/v1/{Type}/{id}` | Bearer | full update (200 + ETag) |
+diff --git a/receiver/app.js b/receiver/app.js
+index f59ea06..fa555d9 100644
+--- a/receiver/app.js
++++ b/receiver/app.js
+@@ -1,67 +1,71 @@
+ // Page wiring only. Logic lives in src/.
+ import { parseCard } from "./src/card.js";
+ import { Outbox, IndexedDbStore, sessionKey } from "./src/outbox.js";
+ import { Uploader } from "./src/uploader.js";
+ import { Capture } from "./src/capture.js";
+ import { simulatorLines } from "./src/simulator.js";
+-import { serialLines } from "./src/serial.js";
++import { serialLines, SERIAL_OPTIONS } from "./src/serial.js";
+ import { Trace, draw } from "./src/plot.js";
+ import { coalesce } from "./src/coalesce.js";
+ 
+ const $ = (id) => document.getElementById(id);
+ const outbox = new Outbox(new IndexedDbStore());
+-const trace = new Trace();
++let trace = new Trace();
++let framePending = false;
+ 
+ let card = null;
+ let uploader = null;
+ let abort = null;
+ let stats = { samples: 0, gaps: 0, rejected: 0 };
+ let up = { confirmed: 0, lastRejectedReason: null, state: "idle" };
+ let counts = { pending: 0, rejected: 0, otherSession: 0 };
+ let running = false;
+ 
+ const showError = (msg) => { $("error").textContent = msg; };
+ 
+ async function refresh() {
+   if (card) {
+     try { counts = await outbox.counts(sessionKey(card)); } catch (e) { showError(`Storage error: ${e.message}`); }
+   }
+   $("status").textContent =
+     `Samples ${stats.samples} | Chunks confirmed ${up.confirmed} | Chunks pending ${counts.pending} | ` +
+     `Gaps ${stats.gaps} | Rejected lines ${stats.rejected}`;
+   const notes = [];
++  if (up.state === "auth") notes.push("Token invalid. Paste a new card.");
++  else if (up.state === "retry") notes.push("Server unreachable, retrying.");
++  else if (up.state === "error") notes.push("Local storage error while uploading, retrying.");
+   if (counts.rejected > 0) {
+     notes.push(`${counts.rejected} chunks rejected by the server` +
+       (up.lastRejectedReason ? `; latest reason: ${up.lastRejectedReason}` : "") + ".");
+   }
+   if (counts.otherSession > 0) {
+     notes.push(`${counts.otherSession} chunks belong to another session. Paste that session's card to send them.`);
+   }
+   $("notes").textContent = notes.join(" ");
+ }
+ 
+ // At most ~4 refreshes a second and never two at once: counts() clones the whole outbox.
+ const scheduleRefresh = coalesce(refresh, 250);
+ 
+ function onUploadStatus(s) {
+   up = s;
+-  if (s.state === "auth") showError("Token invalid. Paste a new card.");
+   scheduleRefresh();
+ }
+ 
+ function setRunning(on, simulated = false) {
+   running = on;
+   $("stop").disabled = !on;
+   $("connect").disabled = on || !navigator.serial;
+   $("simulate").disabled = on;
+-  $("simulated").hidden = !(on && simulated);
++  $("use-card").disabled = on; // chunks go to the card the capture started with
++  if (on) $("simulated").hidden = !simulated; // stays visible after Stop until the next capture
+ }
+ 
+ function useCard() {
+   showError("");
+   let parsed;
+   try {
+     parsed = parseCard($("card").value);
+   } catch (e) {
+     showError(e.message);
+     return;
+@@ -81,38 +85,47 @@ async function startCapture(kind) {
+   showError("");
+   if (!card) { showError("Paste the session card and click Use card first."); return; }
+   abort = new AbortController();
+   const { signal } = abort;
+   let lines;
+   if (kind === "sim") {
+     lines = simulatorLines({ signal });
+   } else {
+     try {
+       const port = await navigator.serial.requestPort();
++      await port.open(SERIAL_OPTIONS);
+       lines = serialLines(port, { signal });
+     } catch (e) {
++      abort = null;
+       showError(`Could not open serial port: ${e.message}`);
+       return;
+     }
+   }
++  trace = new Trace();
+   const capture = new Capture({
+     outbox, sessionKey: sessionKey(card), card,
+     source: kind === "sim" ? "SIMULATED" : "serial",
+-    onSample: (s) => { trace.push(s.I, s.Q); draw($("plot"), trace); },
++    onSample: (s) => {
++      trace.push(s.I, s.Q);
++      if (!framePending) {
++        framePending = true;
++        requestAnimationFrame(() => { framePending = false; draw($("plot"), trace); });
++      }
++    },
+     onStatus: (st) => { stats = st; scheduleRefresh(); },
+   });
+   setRunning(true, kind === "sim");
+   try {
+     const result = await capture.run(lines);
+     if (result === "disconnected") showError("Disconnected. Click Connect to resume.");
+     else if (result === "quota") {
+-      showError("Browser storage is full. Capture stopped. The unsaved partial chunk was lost.");
++      showError("Browser storage is full. Capture stopped. Unsaved data (up to about 10 s) was lost.");
+     }
+   } catch (e) {
+     showError(`Capture failed: ${e.message}`);
+   } finally {
+     abort = null;
+     setRunning(false);
+     scheduleRefresh();
+   }
+ }
+ 
+diff --git a/receiver/index.html b/receiver/index.html
+index 67710ed..108ea91 100644
+--- a/receiver/index.html
++++ b/receiver/index.html
+@@ -13,21 +13,21 @@
+   #notes { color: #444; }
+   [hidden] { display: none !important; }
+ </style>
+ </head>
+ <body>
+ <h1>Raw signal capture</h1>
+ <p><strong>Raw signal only. Not a measurement result or a clinical finding.</strong></p>
+ 
+ <section>
+   <label for="card">Session card</label>
+-  <textarea id="card" spellcheck="false"></textarea>
++  <textarea id="card" autocomplete="off" spellcheck="false"></textarea>
+   <button id="use-card">Use card</button>
+   <span id="card-label"></span>
+ </section>
+ 
+ <section>
+   <button id="connect">Connect serial</button>
+   <button id="simulate">Start simulator</button>
+   <button id="stop" disabled>Stop</button>
+ </section>
+ 
+diff --git a/receiver/src/capture.js b/receiver/src/capture.js
+index 98166ab..a3e0319 100644
+--- a/receiver/src/capture.js
++++ b/receiver/src/capture.js
+@@ -14,34 +14,34 @@ export class Capture {
+     this.stats = { samples: 0, gaps: 0, rejected: 0 };
+   }
+ 
+   _emit() {
+     this.onStatus?.({ ...this.stats });
+   }
+ 
+   async run(lines) {
+     const captureId = this.newId();
+     this.stats = { samples: 0, gaps: 0, rejected: 0 };
+-    let failure = null;
++    let failure = null; // always an Error once set, never falsy
+     let chain = Promise.resolve();
+     const chunker = new Chunker({
+       onChunk: (chunk) => {
+         chain = chain.then(async () => {
+           if (failure) return;
+           try {
+             await this.outbox.add({
+               identifier: identifierValue(captureId, chunk),
+               sessionKey: this.sessionKey,
+               observation: buildObservation(chunk, this.card, { captureId, source: this.source }),
+             });
+           } catch (e) {
+-            failure = e;
++            failure = e ?? new Error("outbox write failed");
+           }
+         });
+       },
+     });
+ 
+     let result = "ended";
+     let lastIdx = null;
+     let lastFs = null;
+     let procError = null;
+     let finished = false;
+diff --git a/receiver/src/outbox.js b/receiver/src/outbox.js
+index 9281284..6931d5f 100644
+--- a/receiver/src/outbox.js
++++ b/receiver/src/outbox.js
+@@ -35,22 +35,23 @@ export class IndexedDbStore {
+     try { await navigator.storage?.persist?.(); } catch { /* refusal is fine */ }
+     return this._db;
+   }
+ 
+   async _tx(mode, fn) {
+     const db = await this._open();
+     return new Promise((resolve, reject) => {
+       const tx = db.transaction("outbox", mode);
+       const req = fn(tx.objectStore("outbox"));
+       tx.oncomplete = () => resolve(req.result);
+-      tx.onerror = () => reject(tx.error);
+-      tx.onabort = () => reject(tx.error);
++      const fail = () => reject(tx.error ?? req.error ?? new Error("IndexedDB request failed"));
++      tx.onerror = fail;
++      tx.onabort = fail;
+     });
+   }
+ 
+   put(record) { const { id, ...rest } = record; return this._tx("readwrite", (s) => s.add(rest)); }
+   update(record) { return this._tx("readwrite", (s) => s.put(record)); }
+   delete(id) { return this._tx("readwrite", (s) => s.delete(id)); }
+   all() { return this._tx("readonly", (s) => s.getAll()); }
+ }
+ 
+ export class Outbox {
+diff --git a/receiver/src/serial.js b/receiver/src/serial.js
+index 190f7b9..ba64e32 100644
+--- a/receiver/src/serial.js
++++ b/receiver/src/serial.js
+@@ -1,15 +1,15 @@
+-// Web Serial line source. Yields text lines until the signal aborts or the device is lost.
++// Web Serial line source. The caller opens the port (so open errors can be shown);
++// this yields text lines until the signal aborts or the device is lost, then closes it.
+ import { LineSplitter } from "./jsonlines.js";
+ 
+-export async function* serialLines(port, { baudRate = 115200, signal } = {}) {
+-  await port.open({ baudRate });
++export async function* serialLines(port, { signal } = {}) {
+   const decoder = new TextDecoderStream();
+   // Keep the pipe promise: the port stays locked until the pipe has finished closing.
+   const piped = port.readable.pipeTo(decoder.writable).catch(() => {});
+   const reader = decoder.readable.getReader();
+   const stop = () => { reader.cancel().catch(() => {}); };
+   signal?.addEventListener("abort", stop, { once: true });
+   if (signal?.aborted) stop();
+   const splitter = new LineSplitter();
+   try {
+     for (;;) {
+@@ -17,10 +17,13 @@ export async function* serialLines(port, { baudRate = 115200, signal } = {}) {
+       if (done) return;
+       for (const line of splitter.push(value)) yield line;
+     }
+   } finally {
+     signal?.removeEventListener("abort", stop);
+     try { await reader.cancel(); } catch { /* already closed or errored */ }
+     await piped; // readable is unlocked now, so close() can succeed
+     try { await port.close(); } catch { /* device may be gone */ }
+   }
+ }
++
++// 64 KiB: the 255-byte default overruns in about 13 ms at 19 KB/s.
++export const SERIAL_OPTIONS = { baudRate: 115200, bufferSize: 65536 };
+diff --git a/receiver/src/uploader.js b/receiver/src/uploader.js
+index 422da4f..cf17bc3 100644
+--- a/receiver/src/uploader.js
++++ b/receiver/src/uploader.js
+@@ -19,30 +19,31 @@ export class Uploader {
+     this.paused = false;
+     this.running = false;
+   }
+ 
+   _status(state) {
+     this.onStatus({ state, confirmed: this.confirmed, lastRejectedReason: this.lastRejectedReason });
+   }
+ 
+   async step() {
+     if (this.paused) return "auth";
+-    const rec = await this.outbox.nextFor(sessionKey(this.card));
++    const card = this.card; // resume() may swap this.card mid-step
++    const rec = await this.outbox.nextFor(sessionKey(card));
+     if (!rec) { this._status("idle"); return "idle"; }
+     this._status("sending");
+ 
+     let res;
+     try {
+       res = await this.fetchFn(`${this.baseUrl}/Observation`, {
+         method: "POST",
+         headers: {
+-          Authorization: `Bearer ${this.card.token}`,
++          Authorization: `Bearer ${card.token}`,
+           "Content-Type": "application/fhir+json",
+           Accept: "application/fhir+json",
+           "If-None-Exist": `identifier=${rec.identifier}`,
+         },
+         body: JSON.stringify(rec.observation),
+       });
+     } catch {
+       return await this._retry();
+     }
+ 
+@@ -51,21 +52,21 @@ export class Uploader {
+       this.confirmed++;
+       this.failures = 0;
+       this._status("sending");
+       return "sent";
+     }
+     if (res.status === 401 || res.status === 403) {
+       this.paused = true;
+       this._status("auth");
+       return "auth";
+     }
+-    if (res.status >= 500) return await this._retry();
++    if (res.status >= 500 || res.status === 408 || res.status === 429) return await this._retry();
+ 
+     // Other 4xx (and anything unexpected): keep the record, mark it rejected.
+     const reason = await this._reason(res);
+     await this.outbox.markRejected(rec.id, reason);
+     this.lastRejectedReason = reason;
+     this._status("sending");
+     return "rejected";
+   }
+ 
+   async _reason(res) {
+@@ -83,21 +84,30 @@ export class Uploader {
+     this._status("retry");
+     await this.sleep(delay);
+     return "retry";
+   }
+ 
+   start() {
+     if (this.running) return;
+     this.running = true;
+     (async () => {
+       while (this.running) {
+-        const r = await this.step();
++        let r;
++        try {
++          r = await this.step();
++        } catch (e) {
++          // Storage or status-callback failure: report, wait, try again.
++          this.failures++;
++          try { this._status("error"); } catch { /* callback is broken too */ }
++          await this.sleep(BACKOFF_MS[Math.min(this.failures - 1, BACKOFF_MS.length - 1)]);
++          continue;
++        }
+         if (r === "idle" || r === "auth") await this.sleep(IDLE_MS);
+       }
+     })();
+   }
+ 
+   stop() { this.running = false; }
+ 
+   resume(card) {
+     this.card = card;
+     this.paused = false;
+diff --git a/receiver/tests/capture.test.js b/receiver/tests/capture.test.js
+index 3af8c6d..f7d599f 100644
+--- a/receiver/tests/capture.test.js
++++ b/receiver/tests/capture.test.js
+@@ -92,10 +92,16 @@ test("rejected line followed by the next index produces an E gap", async () => {
+   assert.equal(obs.component[0].valueSampledData.data.split(" ")[1], "E");
+   assert.match(obs.note[0].text, /"rejected_lines":1/);
+ });
+ 
+ test("a throwing onSample rejects run() instead of reporting disconnected", async () => {
+   const boom = new Error("ui bug");
+   const { cap, store } = make({ onSample: () => { throw boom; } });
+   await assert.rejects(cap.run(gen(lines([0, 1]))), (e) => e === boom);
+   assert.equal(store.all().length, 1);
+ });
++
++test("an outbox.add rejecting with null is still a failure", async () => {
++  const { cap, outbox } = make();
++  outbox.add = async () => { throw null; };
++  await assert.rejects(() => cap.run(gen(lines(Array.from({ length: 1200 }, (_, i) => i)))), (e) => e instanceof Error);
++});
+diff --git a/receiver/tests/uploader.test.js b/receiver/tests/uploader.test.js
+index a2d9ae0..b81ce91 100644
+--- a/receiver/tests/uploader.test.js
++++ b/receiver/tests/uploader.test.js
+@@ -139,10 +139,65 @@ test("other session's chunks are skipped and counted", async () => {
+ });
+ 
+ test("resume with their card sends them", async () => {
+   const t = setup([resp(201)]);
+   await t.outbox.add(rec(1, sessionKey(card2)));
+   t.up.resume(card2);
+   assert.equal(await t.up.step(), "sent");
+   assert.equal(t.calls[0].init.headers.Authorization, "Bearer tok2");
+   assert.equal(t.store.all().length, 0);
+ });
++
++test("408 and 429 are retried, not rejected", async () => {
++  for (const code of [408, 429]) {
++    const t = setup([resp(code)]);
++    await t.outbox.add(rec(1));
++    assert.equal(await t.up.step(), "retry");
++    assert.equal(t.store.all()[0].rejected, false);
++    assert.equal(t.statuses.at(-1).state, "retry");
++  }
++});
++
++test("a resume during an in-flight step does not mix records and tokens", async () => {
++  const store = new MemoryStore();
++  const outbox = new Outbox(store);
++  await outbox.add(rec(1));
++  let release;
++  const gate = new Promise((r) => { release = r; });
++  const seen = [];
++  const fetchFn = async (url, init) => { seen.push(init.headers.Authorization); await gate; return resp(201); };
++  const up = new Uploader({ outbox, fetchFn, card, sleep: async () => {}, onStatus: () => {} });
++  const p = up.step();
++  await new Promise((r) => setTimeout(r, 5));
++  up.resume(card2);
++  release();
++  await p;
++  assert.deepEqual(seen, ["Bearer tok"]);
++  assert.equal(store.all().length, 0);
++});
++
++test("a storage failure in the loop is reported as error and the loop keeps going", async () => {
++  const t = setup([resp(201)]);
++  await t.outbox.add(rec(1));
++  const orig = t.outbox.nextFor.bind(t.outbox);
++  let n = 0;
++  t.outbox.nextFor = async (k) => { if (n++ === 0) throw new Error("db gone"); return orig(k); };
++  let slept = 0;
++  t.up.sleep = async () => { if (++slept > 20) t.up.stop(); await new Promise((r) => setTimeout(r, 1)); };
++  t.up.start();
++  for (let i = 0; i < 100 && t.store.all().length > 0; i++) await new Promise((r) => setTimeout(r, 5));
++  t.up.stop();
++  assert.ok(t.statuses.some((s) => s.state === "error"));
++  assert.equal(t.store.all().length, 0);
++});
++
++test("a throwing onStatus does not end the loop", async () => {
++  const t = setup([resp(201)]);
++  await t.outbox.add(rec(1));
++  let first = true;
++  t.up.onStatus = (s) => { if (first) { first = false; throw new Error("ui"); } t.statuses.push(s); };
++  t.up.sleep = async () => { await new Promise((r) => setTimeout(r, 1)); };
++  t.up.start();
++  for (let i = 0; i < 100 && t.store.all().length > 0; i++) await new Promise((r) => setTimeout(r, 5));
++  t.up.stop();
++  assert.equal(t.store.all().length, 0);
++});

@@ -1,0 +1,402 @@
+# Review package: aace663..54f8aba
+
+## Commits
+54f8aba feat(receiver): capture page served at /capture
+
+## Files changed
+ fhir_server/app.py          |   6 ++
+ receiver/app.js             | 141 ++++++++++++++++++++++++++++++++++++++++++++
+ receiver/index.html         |  41 +++++++++++++
+ receiver/src/plot.js        |  48 +++++++++++++++
+ receiver/src/serial.js      |  22 +++++++
+ receiver/tests/plot.test.js |  35 +++++++++++
+ tests/test_routes.py        |  10 ++++
+ 7 files changed, 303 insertions(+)
+
+## Diff
+diff --git a/fhir_server/app.py b/fhir_server/app.py
+index 985648c..d875694 100644
+--- a/fhir_server/app.py
++++ b/fhir_server/app.py
+@@ -1,21 +1,25 @@
+ import datetime as dt
++from pathlib import Path
+ 
+ from fastapi import FastAPI
+ from fastapi.responses import JSONResponse
++from fastapi.staticfiles import StaticFiles
+ 
+ from .config import Settings
+ from .routes import admin as admin_routes
+ from .routes import auth as auth_routes
+ from .routes import fhir as fhir_routes
+ from .services.fhir_service import SUPPORTED_PARAMS
+ 
++RECEIVER_DIR = Path(__file__).resolve().parent.parent / "receiver"
++
+ 
+ def capability_statement(settings) -> dict:
+     param_types = {
+         "identifier": "token", "name": "string", "birthdate": "date",
+         "gender": "token", "subject": "reference", "patient": "reference",
+         "encounter": "reference", "code": "token", "date": "date",
+         "status": "token", "participant": "reference",
+         "organization": "reference",
+     }
+     resources_out = [{
+@@ -62,11 +66,13 @@ def create_app(settings: Settings) -> FastAPI:
+     app.include_router(admin_routes.router)
+ 
+     # Registered before the FHIR router: GET /fhir-r4/v1/metadata must not be
+     # swallowed by GET /fhir-r4/v1/{type_} (pre-flight ordering ruling).
+     @app.get("/fhir-r4/v1/metadata")
+     def metadata():
+         return JSONResponse(content=capability_statement(settings),
+                             media_type="application/fhir+json")
+ 
+     app.include_router(fhir_routes.router)
++    app.mount("/capture", StaticFiles(directory=RECEIVER_DIR, html=True),
++              name="capture")
+     return app
+diff --git a/receiver/app.js b/receiver/app.js
+new file mode 100644
+index 0000000..1f35c45
+--- /dev/null
++++ b/receiver/app.js
+@@ -0,0 +1,141 @@
++// Page wiring only. Logic lives in src/.
++import { parseCard } from "./src/card.js";
++import { Outbox, IndexedDbStore, sessionKey } from "./src/outbox.js";
++import { Uploader } from "./src/uploader.js";
++import { Capture } from "./src/capture.js";
++import { simulatorLines } from "./src/simulator.js";
++import { serialLines } from "./src/serial.js";
++import { Trace, draw } from "./src/plot.js";
++
++const $ = (id) => document.getElementById(id);
++const outbox = new Outbox(new IndexedDbStore());
++const trace = new Trace();
++
++let card = null;
++let uploader = null;
++let abort = null;
++let stats = { samples: 0, gaps: 0, rejected: 0 };
++let up = { confirmed: 0, lastRejectedReason: null, state: "idle" };
++let counts = { pending: 0, rejected: 0, otherSession: 0 };
++let running = false;
++
++const showError = (msg) => { $("error").textContent = msg; };
++
++async function refresh() {
++  if (card) {
++    try { counts = await outbox.counts(sessionKey(card)); } catch (e) { showError(`Storage error: ${e.message}`); }
++  }
++  $("status").textContent =
++    `Samples ${stats.samples} | Chunks confirmed ${up.confirmed} | Chunks pending ${counts.pending} | ` +
++    `Gaps ${stats.gaps} | Rejected lines ${stats.rejected}`;
++  const notes = [];
++  if (counts.rejected > 0) {
++    notes.push(`${counts.rejected} chunks rejected by the server` +
++      (up.lastRejectedReason ? `; latest reason: ${up.lastRejectedReason}` : "") + ".");
++  }
++  if (counts.otherSession > 0) {
++    notes.push(`${counts.otherSession} chunks belong to another session. Paste that session's card to send them.`);
++  }
++  $("notes").textContent = notes.join(" ");
++}
++
++function onUploadStatus(s) {
++  up = s;
++  if (s.state === "auth") showError("Token invalid. Paste a new card.");
++  refresh();
++}
++
++function setRunning(on, simulated = false) {
++  running = on;
++  $("stop").disabled = !on;
++  $("connect").disabled = on || !navigator.serial;
++  $("simulate").disabled = on;
++  $("simulated").hidden = !(on && simulated);
++}
++
++function useCard() {
++  showError("");
++  let parsed;
++  try {
++    parsed = parseCard($("card").value);
++  } catch (e) {
++    showError(e.message);
++    return;
++  }
++  card = parsed;
++  try { sessionStorage.setItem("prata-card", $("card").value); } catch { /* storage unavailable */ }
++  $("card-label").textContent = `Using card: ${card.label}`;
++  if (uploader) uploader.resume(card);
++  else {
++    uploader = new Uploader({ outbox, fetchFn: (...a) => fetch(...a), card, onStatus: onUploadStatus });
++    uploader.start();
++  }
++  refresh();
++}
++
++async function startCapture(kind) {
++  showError("");
++  if (!card) { showError("Paste the session card and click Use card first."); return; }
++  abort = new AbortController();
++  const { signal } = abort;
++  let lines;
++  if (kind === "sim") {
++    lines = simulatorLines({ signal });
++  } else {
++    try {
++      const port = await navigator.serial.requestPort();
++      lines = serialLines(port, { signal });
++    } catch (e) {
++      showError(`Could not open serial port: ${e.message}`);
++      return;
++    }
++  }
++  const capture = new Capture({
++    outbox, sessionKey: sessionKey(card), card,
++    source: kind === "sim" ? "SIMULATED" : "serial",
++    onSample: (s) => { trace.push(s.I, s.Q); draw($("plot"), trace); },
++    onStatus: (st) => { stats = st; refresh(); },
++  });
++  setRunning(true, kind === "sim");
++  try {
++    const result = await capture.run(lines);
++    if (result === "disconnected") showError("Disconnected. Click Connect to resume.");
++    else if (result === "quota") {
++      showError("Browser storage is full. Capture stopped. The unsaved partial chunk was lost.");
++    }
++  } catch (e) {
++    showError(`Capture failed: ${e.message}`);
++  } finally {
++    abort = null;
++    setRunning(false);
++    refresh();
++  }
++}
++
++$("use-card").addEventListener("click", useCard);
++$("connect").addEventListener("click", () => startCapture("serial"));
++$("simulate").addEventListener("click", () => startCapture("sim"));
++$("stop").addEventListener("click", () => { abort?.abort(); });
++
++if (!navigator.serial) {
++  $("connect").disabled = true;
++  $("connect").title = "This browser has no Web Serial. Use Chrome or Edge.";
++  showError("This browser has no Web Serial. Use Chrome or Edge.");
++}
++
++try {
++  const saved = sessionStorage.getItem("prata-card");
++  if (saved) { $("card").value = saved; useCard(); }
++} catch { /* storage unavailable */ }
++
++// Chunks left from an earlier load are reported; they upload once a card is set.
++(async () => {
++  try {
++    const rows = await outbox.store.all();
++    if (rows.length > 0 && !card) {
++      $("notes").textContent = `${rows.length} chunks are waiting from an earlier session. Paste a card to send them.`;
++    }
++  } catch (e) {
++    showError(`Storage error: ${e.message}`);
++  }
++})();
+diff --git a/receiver/index.html b/receiver/index.html
+new file mode 100644
+index 0000000..67710ed
+--- /dev/null
++++ b/receiver/index.html
+@@ -0,0 +1,41 @@
++<!doctype html>
++<html lang="en">
++<head>
++<meta charset="utf-8">
++<meta name="viewport" content="width=device-width, initial-scale=1">
++<title>Raw signal capture</title>
++<style>
++  body { font-family: system-ui, sans-serif; max-width: 52rem; margin: 1rem auto; padding: 0 1rem; }
++  textarea { width: 100%; height: 6rem; font-family: monospace; }
++  canvas { width: 100%; height: 200px; border: 1px solid #888; background: #fafafa; }
++  #simulated { background: #b00020; color: #fff; font-size: 2rem; font-weight: bold; text-align: center; padding: .5rem; margin: .5rem 0; }
++  #error { color: #b00020; font-weight: bold; min-height: 1.5rem; }
++  #notes { color: #444; }
++  [hidden] { display: none !important; }
++</style>
++</head>
++<body>
++<h1>Raw signal capture</h1>
++<p><strong>Raw signal only. Not a measurement result or a clinical finding.</strong></p>
++
++<section>
++  <label for="card">Session card</label>
++  <textarea id="card" spellcheck="false"></textarea>
++  <button id="use-card">Use card</button>
++  <span id="card-label"></span>
++</section>
++
++<section>
++  <button id="connect">Connect serial</button>
++  <button id="simulate">Start simulator</button>
++  <button id="stop" disabled>Stop</button>
++</section>
++
++<div id="simulated" hidden>SIMULATED</div>
++<canvas id="plot" width="1000" height="200"></canvas>
++<p id="status">Samples 0 | Chunks confirmed 0 | Chunks pending 0 | Gaps 0 | Rejected lines 0</p>
++<p id="notes"></p>
++<p id="error" role="alert"></p>
++<script type="module" src="app.js"></script>
++</body>
++</html>
+diff --git a/receiver/src/plot.js b/receiver/src/plot.js
+new file mode 100644
+index 0000000..db8fcc2
+--- /dev/null
++++ b/receiver/src/plot.js
+@@ -0,0 +1,48 @@
++// Rolling trace of the I and Q voltages. Pure maths in Trace; draw() only paints.
++
++export class Trace {
++  constructor(capacity = 1000) {
++    this.capacity = capacity;
++    this.i = [];
++    this.q = [];
++  }
++
++  push(i, q) {
++    this.i.push(i);
++    this.q.push(q);
++    if (this.i.length > this.capacity) {
++      this.i.shift();
++      this.q.shift();
++    }
++  }
++
++  // Each series is scaled to its own range, so the shape is visible at any offset.
++  points(width, height) {
++    return { i: scale(this.i, this.capacity, width, height), q: scale(this.q, this.capacity, width, height) };
++  }
++}
++
++function scale(values, capacity, width, height) {
++  if (values.length === 0) return [];
++  const lo = Math.min(...values);
++  const hi = Math.max(...values);
++  const span = hi - lo;
++  const step = capacity > 1 ? width / (capacity - 1) : 0;
++  return values.map((v, n) => {
++    const frac = span > 0 ? (v - lo) / span : 0.5; // constant signal: draw mid-height
++    return [n * step, height - frac * height];
++  });
++}
++
++export function draw(canvas, trace) {
++  const ctx = canvas.getContext("2d");
++  const { width, height } = canvas;
++  ctx.clearRect(0, 0, width, height);
++  const p = trace.points(width, height);
++  for (const [pts, colour] of [[p.i, "#1b6ec2"], [p.q, "#c2571b"]]) {
++    ctx.strokeStyle = colour;
++    ctx.beginPath();
++    pts.forEach(([x, y], n) => (n === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)));
++    ctx.stroke();
++  }
++}
+diff --git a/receiver/src/serial.js b/receiver/src/serial.js
+new file mode 100644
+index 0000000..37ccf49
+--- /dev/null
++++ b/receiver/src/serial.js
+@@ -0,0 +1,22 @@
++// Web Serial line source. Yields text lines until the signal aborts or the device is lost.
++import { LineSplitter } from "./jsonlines.js";
++
++export async function* serialLines(port, { baudRate = 115200, signal } = {}) {
++  await port.open({ baudRate });
++  const reader = port.readable.pipeThrough(new TextDecoderStream()).getReader();
++  const stop = () => { reader.cancel().catch(() => {}); };
++  signal?.addEventListener("abort", stop, { once: true });
++  if (signal?.aborted) stop();
++  const splitter = new LineSplitter();
++  try {
++    for (;;) {
++      const { value, done } = await reader.read(); // a device-lost error propagates
++      if (done) return;
++      for (const line of splitter.push(value)) yield line;
++    }
++  } finally {
++    signal?.removeEventListener("abort", stop);
++    try { await reader.cancel(); } catch { /* already closed or errored */ }
++    try { await port.close(); } catch { /* device may be gone */ }
++  }
++}
+diff --git a/receiver/tests/plot.test.js b/receiver/tests/plot.test.js
+new file mode 100644
+index 0000000..b03ad3e
+--- /dev/null
++++ b/receiver/tests/plot.test.js
+@@ -0,0 +1,35 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import { Trace } from "../src/plot.js";
++
++test("capacity keeps only the last 1000 points", () => {
++  const t = new Trace();
++  for (let n = 0; n < 1500; n++) t.push(n, -n);
++  const p = t.points(1000, 100);
++  assert.equal(p.i.length, 1000);
++  assert.equal(p.q.length, 1000);
++  // oldest kept sample is 500, so it is the lowest I: it sits at the bottom (largest y)
++  assert.ok(p.i[0][1] > p.i[999][1]);
++});
++
++test("a constant signal gives finite y values", () => {
++  const t = new Trace();
++  for (let n = 0; n < 50; n++) t.push(1.65, 1.65);
++  const p = t.points(200, 100);
++  for (const [x, y] of [...p.i, ...p.q]) {
++    assert.ok(Number.isFinite(x) && Number.isFinite(y));
++  }
++});
++
++test("points stay inside width and height", () => {
++  const t = new Trace(100);
++  for (let n = 0; n < 300; n++) t.push(Math.sin(n / 5) * 3, Math.cos(n / 7) * 0.001);
++  const p = t.points(320, 120);
++  for (const [x, y] of [...p.i, ...p.q]) {
++    assert.ok(x >= 0 && x <= 320 && y >= 0 && y <= 120, `${x},${y}`);
++  }
++});
++
++test("an empty trace has no points", () => {
++  assert.deepEqual(new Trace().points(100, 50), { i: [], q: [] });
++});
+diff --git a/tests/test_routes.py b/tests/test_routes.py
+index 486044b..28fcd1e 100644
+--- a/tests/test_routes.py
++++ b/tests/test_routes.py
+@@ -145,10 +145,20 @@ def test_delete_honours_accept_406(client):
+     assert r.status_code == 406
+ 
+ 
+ def test_account_ref_must_exist(client):
+     tok = admin_token(client)
+     r = client.post("/fhir-r4/v1/admin/accounts", headers=hdr(tok),
+                     json={"username": "doc-bad", "password": "pw",
+                           "role": "doctor", "ref": "Practitioner/NOPE"})
+     assert r.status_code == 400
+     assert r.json()["resourceType"] == "OperationOutcome"
++
++
++def test_capture_page_served(client):
++    r = client.get("/capture/")
++    assert r.status_code == 200 and "Raw signal" in r.text
++
++
++def test_capture_module_has_js_mime(client):
++    r = client.get("/capture/src/jsonlines.js")
++    assert r.status_code == 200 and "javascript" in r.headers["content-type"]

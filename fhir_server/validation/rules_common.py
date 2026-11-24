@@ -7,6 +7,7 @@ from .issues import (Issue, R_DATETIME, R_EMPTY_TEXT, R_BAD_CODING_SYSTEM,
 
 ALLOWED_SYSTEMS = {
     "http://loinc.org",
+    "urn:prata:radar-signal",
     "http://unitsofmeasure.org",
     "http://hl7.org/fhir/administrative-gender",
     "http://hl7.org/fhir/observation-status",

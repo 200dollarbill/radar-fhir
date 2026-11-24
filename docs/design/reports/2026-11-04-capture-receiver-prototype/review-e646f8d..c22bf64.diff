@@ -1,0 +1,271 @@
+# Review package: e646f8d..c22bf64
+
+## Commits
+c22bf64 feat(receiver): session card parsing and capture controller
+
+## Files changed
+ receiver/src/capture.js        | 79 +++++++++++++++++++++++++++++++++++
+ receiver/src/card.js           | 32 ++++++++++++++
+ receiver/tests/capture.test.js | 94 ++++++++++++++++++++++++++++++++++++++++++
+ receiver/tests/card.test.js    | 29 +++++++++++++
+ 4 files changed, 234 insertions(+)
+
+## Diff
+diff --git a/receiver/src/capture.js b/receiver/src/capture.js
+new file mode 100644
+index 0000000..522e6ea
+--- /dev/null
++++ b/receiver/src/capture.js
+@@ -0,0 +1,79 @@
++// Capture controller: serial/simulated lines -> samples -> chunks -> outbox.
++// Stop is done by the caller ending the line source.
++import { parseLine } from "./jsonlines.js";
++import { Chunker } from "./chunker.js";
++import { buildObservation, identifierValue } from "./observation.js";
++
++const MAX_FILL = 999; // mirrors Chunker: a larger gap starts a new segment
++
++const isQuota = (e) => e?.name === "QuotaExceededError";
++
++export class Capture {
++  constructor({ outbox, sessionKey, card, source, onSample, onStatus, newId = () => "cap-" + crypto.randomUUID() }) {
++    Object.assign(this, { outbox, sessionKey, card, source, onSample, onStatus, newId });
++    this.stats = { samples: 0, gaps: 0, rejected: 0 };
++  }
++
++  _emit() {
++    this.onStatus?.({ ...this.stats });
++  }
++
++  async run(lines) {
++    const captureId = this.newId();
++    this.stats = { samples: 0, gaps: 0, rejected: 0 };
++    let failure = null;
++    let chain = Promise.resolve();
++    const chunker = new Chunker({
++      onChunk: (chunk) => {
++        chain = chain.then(async () => {
++          if (failure) return;
++          try {
++            await this.outbox.add({
++              identifier: identifierValue(captureId, chunk),
++              sessionKey: this.sessionKey,
++              observation: buildObservation(chunk, this.card, { captureId, source: this.source }),
++            });
++          } catch (e) {
++            failure = e;
++          }
++        });
++      },
++    });
++
++    let result = "ended";
++    let lastIdx = null;
++    let lastFs = null;
++    try {
++      for await (const line of lines) {
++        const r = parseLine(line);
++        if (r.kind === "sample") {
++          const s = r.sample;
++          if (lastIdx !== null && s.fs === lastFs) {
++            const gap = s.sampleIdx - lastIdx - 1;
++            if (gap > 0 && gap <= MAX_FILL) this.stats.gaps += gap;
++          }
++          lastIdx = s.sampleIdx;
++          lastFs = s.fs;
++          this.stats.samples += 1;
++          chunker.addSample(s);
++          this.onSample?.(s);
++          this._emit();
++        } else if (r.kind === "rejected") {
++          this.stats.rejected += 1;
++          chunker.noteRejected();
++          this._emit();
++        }
++        if (failure) break;
++      }
++    } catch {
++      result = "disconnected";
++    }
++    if (!failure) chunker.flush();
++    await chain;
++    if (failure) {
++      if (isQuota(failure)) return "quota";
++      throw failure;
++    }
++    return result;
++  }
++}
+diff --git a/receiver/src/card.js b/receiver/src/card.js
+new file mode 100644
+index 0000000..db8c6c9
+--- /dev/null
++++ b/receiver/src/card.js
+@@ -0,0 +1,32 @@
++// Parse the session card printed by the server's capture-session command.
++
++const REQUIRED = ["token", "patient", "encounter", "device", "org", "label"];
++const PREFIXES = { patient: "Patient/", encounter: "Encounter/", device: "Device/" };
++
++export function parseCard(text) {
++  if (typeof text !== "string" || text.trim() === "") {
++    throw new Error("Paste the session card printed by the server first.");
++  }
++  let card;
++  try {
++    card = JSON.parse(text);
++  } catch {
++    throw new Error("The session card is not valid JSON.");
++  }
++  if (card === null || typeof card !== "object" || Array.isArray(card)) {
++    throw new Error("The session card must be a JSON object.");
++  }
++  for (const f of REQUIRED) {
++    if (!(f in card)) throw new Error(`Session card is missing field ${f}.`);
++    if (typeof card[f] !== "string" || card[f] === "") {
++      throw new Error(`Session card field ${f} must be a non-empty string.`);
++    }
++  }
++  for (const [f, prefix] of Object.entries(PREFIXES)) {
++    if (!card[f].startsWith(prefix) || card[f].length === prefix.length) {
++      throw new Error(`Session card field ${f} must start with ${prefix}`);
++    }
++  }
++  const { token, patient, encounter, device, org, label } = card;
++  return { token, patient, encounter, device, org, label };
++}
+diff --git a/receiver/tests/capture.test.js b/receiver/tests/capture.test.js
+new file mode 100644
+index 0000000..006b458
+--- /dev/null
++++ b/receiver/tests/capture.test.js
+@@ -0,0 +1,94 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import { Capture } from "../src/capture.js";
++import { Outbox, MemoryStore, sessionKey } from "../src/outbox.js";
++import { formatLine } from "../src/simulator.js";
++
++const card = {
++  token: "t", patient: "Patient/p1", encounter: "Encounter/e1",
++  device: "Device/d1", org: "org1", label: "L",
++};
++
++async function* gen(items, thenThrow) {
++  for (const x of items) yield x;
++  if (thenThrow) throw thenThrow;
++}
++const lines = (idxs) => idxs.map((i) => formatLine(i, 100, {}));
++
++function make(extra = {}) {
++  const store = new MemoryStore();
++  const outbox = new Outbox(store);
++  const samples = [];
++  let n = 0;
++  const cap = new Capture({
++    outbox, sessionKey: sessionKey(card), card, source: "SIMULATED",
++    onSample: (s) => samples.push(s), newId: () => "cap-" + ++n, ...extra,
++  });
++  return { store, outbox, cap, samples };
++}
++
++test("lines reach onSample and the outbox", async () => {
++  const { cap, samples, store } = make();
++  await cap.run(gen(lines([0, 1, 2])));
++  assert.equal(samples.length, 3);
++  assert.equal(store.all().length, 1);
++});
++
++test("every chunk is in the outbox before run resolves", async () => {
++  const slow = new Outbox(new MemoryStore());
++  const orig = slow.add.bind(slow);
++  slow.add = async (r) => { await new Promise((r2) => setTimeout(r2, 5)); return orig(r); };
++  const { cap } = make({ outbox: slow });
++  await cap.run(gen(lines(Array.from({ length: 2500 }, (_, i) => i))));
++  const rows = slow.store.all();
++  assert.equal(rows.length, 3);
++  assert.deepEqual(rows.map((r) => r.identifier.split("-").pop()), ["0", "1", "2"]);
++});
++
++test("ending the iterable flushes the partial chunk and returns ended", async () => {
++  const { cap, store } = make();
++  assert.equal(await cap.run(gen(lines([0, 1]))), "ended");
++  assert.equal(store.all().length, 1);
++});
++
++test("the iterable throwing flushes and returns disconnected", async () => {
++  const { cap, store } = make();
++  assert.equal(await cap.run(gen(lines([0, 1]), new Error("unplugged"))), "disconnected");
++  assert.equal(store.all().length, 1);
++});
++
++test("store quota error stops reading and returns quota", async () => {
++  const outbox = new Outbox(new MemoryStore());
++  outbox.add = async () => { throw new DOMException("full", "QuotaExceededError"); };
++  let consumed = 0;
++  async function* src() { for (let i = 0; i < 5000; i++) { consumed++; yield* lines([i]); } }
++  const { cap } = make({ outbox });
++  assert.equal(await cap.run(src()), "quota");
++  assert.ok(consumed < 5000);
++});
++
++test("each run has a new captureId", async () => {
++  const { cap, store } = make();
++  await cap.run(gen(lines([0])));
++  await cap.run(gen(lines([0])));
++  const ids = store.all().map((r) => r.identifier);
++  assert.equal(ids.length, 2);
++  assert.notEqual(ids[0], ids[1]);
++  assert.match(ids[0], /^cap-1-/);
++});
++
++test("stats count samples, gaps and rejected lines", async () => {
++  const seen = [];
++  const { cap } = make({ onStatus: (s) => seen.push({ ...s }) });
++  await cap.run(gen([...lines([0, 1]), "{bad", "banner text", ...lines([4])]));
++  assert.deepEqual(cap.stats, { samples: 3, gaps: 2, rejected: 1 });
++  assert.deepEqual(seen.at(-1), cap.stats);
++});
++
++test("rejected line followed by the next index produces an E gap", async () => {
++  const { cap, store } = make();
++  await cap.run(gen([...lines([0]), '{"bad":1}', ...lines([2])]));
++  const obs = store.all()[0].observation;
++  assert.equal(obs.component[0].valueSampledData.data.split(" ")[1], "E");
++  assert.match(obs.note[0].text, /"rejected_lines":1/);
++});
+diff --git a/receiver/tests/card.test.js b/receiver/tests/card.test.js
+new file mode 100644
+index 0000000..74ce9ad
+--- /dev/null
++++ b/receiver/tests/card.test.js
+@@ -0,0 +1,29 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import { parseCard } from "../src/card.js";
++
++const good = {
++  token: "tok", patient: "Patient/p1", encounter: "Encounter/e1",
++  device: "Device/d1", org: "org1", label: "Synthetic A",
++};
++
++test("a valid card parses", () => {
++  assert.deepEqual(parseCard(JSON.stringify(good)), good);
++});
++
++test("empty string gives a message saying to paste a card", () => {
++  assert.throws(() => parseCard("  "), /paste/i);
++});
++
++test("non-JSON text gives a message saying it is not valid JSON", () => {
++  assert.throws(() => parseCard("hello"), /not valid JSON/i);
++});
++
++test("seed summary JSON is rejected, naming the missing field", () => {
++  const seed = { organization: "org1", patients: [], practitioner: "x" };
++  assert.throws(() => parseCard(JSON.stringify(seed)), /missing field token/);
++});
++
++test("patient without the Patient/ prefix is rejected", () => {
++  assert.throws(() => parseCard(JSON.stringify({ ...good, patient: "p1" })), /patient must start with Patient\//);
++});

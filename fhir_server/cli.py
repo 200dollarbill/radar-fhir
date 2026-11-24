@@ -1,6 +1,8 @@
 import argparse
+import getpass
 import json
 import os
+import re
 import secrets
 import sys
 
@@ -71,7 +73,8 @@ def cmd_seed(args):
         "name": [{"use": "official", "text": "drg. Contoh, Sp.JP",
                   "family": "Contoh", "given": ["Contoh"]}],
         "gender": "male", "birthDate": "1980-05-05"})
-    doctor_password = os.environ.get("FHIR_DOCTOR_PASSWORD", "doctor-pw")
+    doctor_password = os.environ.get("FHIR_DOCTOR_PASSWORD") \
+        or secrets.token_urlsafe(12)
     accounts.create(conn, "doctor", hash_password(doctor_password), "doctor",
                     f"Practitioner/{doc_id}")
 
@@ -100,7 +103,8 @@ def cmd_seed(args):
                     {"url": "village", "valueCode": "317101001"},
                     {"url": "rt", "valueCode": "001"},
                     {"url": "rw", "valueCode": "001"}]}]}]})
-    patient_password = os.environ.get("FHIR_PATIENT_PASSWORD", "patient-pw")
+    patient_password = os.environ.get("FHIR_PATIENT_PASSWORD") \
+        or secrets.token_urlsafe(12)
     accounts.create(conn, "patient", hash_password(patient_password), "patient",
                     f"Patient/{pat_id}")
 
@@ -123,6 +127,153 @@ def cmd_seed(args):
     }))
 
 
+def cmd_capture_session(args):
+    from . import db as db_mod
+    from .auth.jwt import Principal
+    from .config import Settings
+    from .repositories import resources
+    from .services.fhir_service import FhirError, FhirService
+    from .services.sessions import make_test_patient, open_visit
+
+    label = args.label
+    if not re.fullmatch(r"[A-Za-z0-9-]{1,32}", label):
+        print("invalid label: use 1-32 letters, digits or hyphens",
+              file=sys.stderr)
+        sys.exit(2)
+    conn = db_mod.connect(args.db)
+    db_mod.init(conn)
+    first = {t: (resources.list(conn, t) or [None])[0]
+             for t in ("Organization", "Location", "Practitioner", "Device")}
+    if not all(first.values()):
+        print('database not seeded: run "seed" first', file=sys.stderr)
+        sys.exit(1)
+    org, prac, dev = first["Organization"], first["Practitioner"], first["Device"]
+    svc = FhirService(conn, Settings.from_env(db_path=args.db))
+    admin = Principal(kind="admin")
+    try:
+        patient = make_test_patient(svc, label)
+    except FhirError as exc:
+        print(str(exc), file=sys.stderr)
+        sys.exit(1)
+    enc_id = open_visit(svc, admin, patient["id"], f"Practitioner/{prac['id']}",
+                        label)
+    token = svc.provision_device(admin, dev["id"], f"Patient/{patient['id']}")
+    print(json.dumps({
+        "token": token, "patient": f"Patient/{patient['id']}",
+        "encounter": f"Encounter/{enc_id}", "device": f"Device/{dev['id']}",
+        "org": org["id"], "label": label}))
+
+
+def cmd_set_password(args):
+    """Seed reads FHIR_ADMIN_PASSWORD only once; this changes a password later
+    without wiping the database. The password comes from an environment
+    variable so it never appears in the shell history or the output."""
+    from . import db as db_mod
+    from .auth.passwords import hash_password
+    from .repositories import accounts
+
+    password = os.environ.get(args.from_env)
+    if not password:
+        print(f"environment variable {args.from_env} is not set or empty",
+              file=sys.stderr)
+        sys.exit(2)
+    conn = db_mod.connect(args.db)
+    db_mod.init(conn)
+    if not accounts.set_password(conn, args.username, hash_password(password)):
+        print(f"no active account named {args.username}", file=sys.stderr)
+        sys.exit(1)
+    print(f"password updated for {args.username}")
+
+
+USERNAME = re.compile(r"[A-Za-z0-9._-]{3,32}")
+
+
+def _usage(message):
+    print(message, file=sys.stderr)
+    sys.exit(2)
+
+
+def _new_password(from_env):
+    """From an environment variable, or typed twice at a hidden prompt.
+    Never from the command line, so it stays out of shell history."""
+    if from_env:
+        password = os.environ.get(from_env)
+        if not password:
+            _usage(f"environment variable {from_env} is not set or empty")
+        return password
+    password = getpass.getpass("Password: ")
+    if getpass.getpass("Repeat password: ") != password:
+        _usage("passwords do not match")
+    if not password:
+        _usage("empty password")
+    return password
+
+
+def cmd_add_account(args):
+    from . import db as db_mod
+    from .auth.passwords import hash_password
+    from .config import Settings
+    from .repositories import accounts, resources
+    from .services.fhir_service import FhirError, FhirService
+    from .services.sessions import make_test_practitioner
+
+    if not USERNAME.fullmatch(args.username):
+        _usage("invalid username: use 3 to 32 letters, digits, dots,"
+               " underscores or hyphens")
+    conn = db_mod.connect(args.db)
+    db_mod.init(conn)
+    if any(a["username"] == args.username for a in accounts.list_all(conn)):
+        print(f"account {args.username} already exists", file=sys.stderr)
+        sys.exit(1)
+    needs = {"admin": set(), "doctor": {"name"}, "patient": {"ref"}}[args.role]
+    for opt in ("name", "ref"):
+        given = bool(getattr(args, opt))
+        if opt in needs and not given:
+            _usage(f"--role {args.role} needs --{opt}")
+        if opt not in needs and given:
+            _usage(f"--role {args.role} does not take --{opt}")
+    ref = None
+    if args.role == "patient":
+        if not args.ref.startswith("Patient/"):
+            _usage("--ref must be Patient/<id>")
+        if not resources.get(conn, "Patient", args.ref.split("/", 1)[1]):
+            print(f"no {args.ref}", file=sys.stderr)
+            sys.exit(1)
+        ref = args.ref
+    password = _new_password(args.from_env)
+    if args.role == "doctor":
+        svc = FhirService(conn, Settings.from_env(db_path=args.db))
+        try:
+            ref = f"Practitioner/{make_test_practitioner(svc, args.name)['id']}"
+        except FhirError as exc:
+            print(str(exc), file=sys.stderr)
+            sys.exit(1)
+    accounts.create(conn, args.username, hash_password(password), args.role, ref)
+    print(f"created {args.role} {args.username}" + (f" ({ref})" if ref else ""))
+
+
+def cmd_list_accounts(args):
+    from . import db as db_mod
+    from .repositories import accounts
+    conn = db_mod.connect(args.db)
+    db_mod.init(conn)
+    print("username\trole\tref\tactive")
+    for a in accounts.list_all(conn):
+        print("\t".join([a["username"], a["role"], a["subject_ref"] or "-",
+                         "yes" if a["active"] else "no"]))
+
+
+def cmd_disable_account(args):
+    from . import db as db_mod
+    from .repositories import accounts
+    conn = db_mod.connect(args.db)
+    db_mod.init(conn)
+    if not accounts.set_active(conn, args.username, False):
+        print(f"no account named {args.username}", file=sys.stderr)
+        sys.exit(1)
+    print(f"disabled {args.username}")
+
+
 def cmd_serve(args):
     import uvicorn
 
@@ -137,12 +288,33 @@ def main(argv=None):
     _ensure_secret()
     parser = argparse.ArgumentParser(prog="fhir_server")
     parser.add_argument("--db",
-                        default=os.environ.get("FHIR_DB_PATH", "fhir_server.db"))
+                        default=os.environ.get("FHIR_DB_PATH", "data/fhir_server.db"))
     sub = parser.add_subparsers(dest="cmd", required=True)
     sub.add_parser("init-db").set_defaults(fn=cmd_init_db)
     seed = sub.add_parser("seed")
     seed.add_argument("--reset", action="store_true")
     seed.set_defaults(fn=cmd_seed)
+    cap = sub.add_parser("capture-session")
+    cap.add_argument("--label", required=True)
+    cap.set_defaults(fn=cmd_capture_session)
+    pw = sub.add_parser("set-password")
+    pw.add_argument("--username", required=True)
+    pw.add_argument("--from-env", default="FHIR_ADMIN_PASSWORD",
+                    help="environment variable holding the new password")
+    pw.set_defaults(fn=cmd_set_password)
+    add = sub.add_parser("add-account", help="create a login (admin, doctor, patient)")
+    add.add_argument("--role", required=True, choices=["admin", "doctor", "patient"])
+    add.add_argument("--username", required=True)
+    add.add_argument("--name", help="doctor's display name (doctor only)")
+    add.add_argument("--ref", help="Patient/<id> the login belongs to (patient only)")
+    add.add_argument("--from-env", default=None,
+                     help="environment variable holding the password"
+                          " (default: ask twice at a hidden prompt)")
+    add.set_defaults(fn=cmd_add_account)
+    sub.add_parser("list-accounts").set_defaults(fn=cmd_list_accounts)
+    dis = sub.add_parser("disable-account")
+    dis.add_argument("--username", required=True)
+    dis.set_defaults(fn=cmd_disable_account)
     serve = sub.add_parser("serve")
     serve.add_argument("--port", type=int, default=8000)
     serve.set_defaults(fn=cmd_serve)

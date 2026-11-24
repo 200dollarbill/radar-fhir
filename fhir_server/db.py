@@ -1,4 +1,5 @@
 import sqlite3
+from pathlib import Path
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS resources (
@@ -13,6 +14,19 @@ CREATE TABLE IF NOT EXISTS device_tokens (
     id TEXT PRIMARY KEY, device_id TEXT NOT NULL, patient_id TEXT NOT NULL,
     token_sha256 TEXT NOT NULL UNIQUE, created TEXT NOT NULL,
     revoked INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS conditional_keys (
+    type TEXT NOT NULL, identifier_value TEXT NOT NULL,
+    resource_id TEXT NOT NULL, PRIMARY KEY (type, identifier_value));
+CREATE TABLE IF NOT EXISTS boards (
+    serial TEXT PRIMARY KEY, device_id TEXT NOT NULL UNIQUE,
+    key_sha256 TEXT NOT NULL UNIQUE, registered TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS board_sessions (
+    id TEXT PRIMARY KEY, serial TEXT NOT NULL, device_id TEXT NOT NULL,
+    patient_ref TEXT NOT NULL, encounter_ref TEXT NOT NULL,
+    practitioner_ref TEXT NOT NULL, label TEXT NOT NULL,
+    started TEXT NOT NULL, ended TEXT);
+CREATE UNIQUE INDEX IF NOT EXISTS one_open_session_per_board
+    ON board_sessions(serial) WHERE ended IS NULL;
 """
 
 
@@ -20,6 +34,8 @@ def connect(db_path: str) -> sqlite3.Connection:
     # One shared connection for the app's single event loop; FastAPI serves
     # routes on a different thread than create_app ran on, so pinning to the
     # creating thread would raise ProgrammingError.
+    if db_path != ":memory:":
+        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db_path, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")

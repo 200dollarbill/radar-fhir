@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 990 400" width="990" height="400" font-family="Helvetica, Arial, sans-serif">
+  <title>Tabel 1. Perbandingan penelitian terkait</title>
+  <desc>Perbandingan empat penelitian terkait: dua studi FHIR dan SATUSEHAT, dan dua studi monitoring RADAR, beserta fokus, kontribusi, dan batasan masing-masing terhadap penelitian ini.</desc>
+
+  <!-- background -->
+  <rect x="0" y="0" width="990" height="400" fill="#ffffff"/>
+
+  <!-- column geometry: x, width -->
+  <!-- c1: 20,170  c2: 202,248  c3: 462,248  c4: 722,248 -->
+
+  <!-- header -->
+  <rect x="20" y="8" width="950" height="42" fill="#1f3a5f"/>
+  <text x="34" y="34" font-size="13.5" font-weight="bold" fill="#ffffff">Sumber</text>
+  <text x="216" y="34" font-size="13.5" font-weight="bold" fill="#ffffff">Fokus dan metode</text>
+  <text x="476" y="34" font-size="13.5" font-weight="bold" fill="#ffffff">Kontribusi yang relevan</text>
+  <text x="736" y="34" font-size="13.5" font-weight="bold" fill="#ffffff">Batas terhadap penelitian ini</text>
+
+  <!-- row 1: FHIR / SATUSEHAT -->
+  <rect x="20" y="50" width="950" height="88" fill="#f5f8fc"/>
+  <text x="34" y="76" font-size="13.5" fill="#1a1a1a">
+    <tspan x="34" dy="0">Chaidir dan</tspan>
+    <tspan x="34" dy="19">Hareva [7]</tspan>
+  </text>
+  <text x="216" y="76" font-size="13.5" fill="#1a1a1a">
+    <tspan x="216" dy="0">IG FHIR R4 ECG yang patuh</tspan>
+    <tspan x="216" dy="19">SATUSEHAT; pemetaan</tspan>
+    <tspan x="216" dy="19">HL7 aECG ke FHIR</tspan>
+  </text>
+  <text x="476" y="76" font-size="13.5" fill="#1a1a1a">
+    <tspan x="476" dy="0">Pemetaan data fisiologis ke</tspan>
+    <tspan x="476" dy="19">FHIR dalam konteks</tspan>
+    <tspan x="476" dy="19">Indonesia</tspan>
+  </text>
+  <text x="736" y="76" font-size="13.5" fill="#1a1a1a">
+    <tspan x="736" dy="0">Berfokus pada ECG, bukan</tspan>
+    <tspan x="736" dy="19">karakteristik pengukuran</tspan>
+    <tspan x="736" dy="19">RADAR</tspan>
+  </text>
+
+  <!-- row 2: FHIR -->
+  <rect x="20" y="138" width="950" height="88" fill="#ffffff"/>
+  <text x="34" y="164" font-size="13.5" fill="#1a1a1a">
+    <tspan x="34" dy="0">Adochiei dkk. [6]</tspan>
+  </text>
+  <text x="216" y="164" font-size="13.5" fill="#1a1a1a">
+    <tspan x="216" dy="0">Kerangka akuisisi sinyal</tspan>
+    <tspan x="216" dy="19">biomedis waktu nyata</tspan>
+    <tspan x="216" dy="19">berbasis FHIR</tspan>
+  </text>
+  <text x="476" y="164" font-size="13.5" fill="#1a1a1a">
+    <tspan x="476" dy="0">Contoh alur sinyal dan</tspan>
+    <tspan x="476" dy="19">interoperabilitas IoMT</tspan>
+  </text>
+  <text x="736" y="164" font-size="13.5" fill="#1a1a1a">
+    <tspan x="736" dy="0">Bukan profil RADAR yang</tspan>
+    <tspan x="736" dy="19">berorientasi SATUSEHAT</tspan>
+  </text>
+
+  <!-- row 3: RADAR -->
+  <rect x="20" y="226" width="950" height="88" fill="#f5f8fc"/>
+  <text x="34" y="252" font-size="13.5" fill="#1a1a1a">
+    <tspan x="34" dy="0">Suzuki dkk. [17]</tspan>
+  </text>
+  <text x="216" y="252" font-size="13.5" fill="#1a1a1a">
+    <tspan x="216" dy="0">Pengukuran JVP dengan</tspan>
+    <tspan x="216" dy="19">sensor gelombang mikro</tspan>
+    <tspan x="216" dy="19">nonkontak</tspan>
+  </text>
+  <text x="476" y="252" font-size="13.5" fill="#1a1a1a">
+    <tspan x="476" dy="0">Bukti kelayakan pengukuran</tspan>
+    <tspan x="476" dy="19">JVP tanpa kontak</tspan>
+  </text>
+  <text x="736" y="252" font-size="13.5" fill="#1a1a1a">
+    <tspan x="736" dy="0">Tidak merancang</tspan>
+    <tspan x="736" dy="19">representasi atau profil</tspan>
+    <tspan x="736" dy="19">FHIR</tspan>
+  </text>
+
+  <!-- row 4: RADAR -->
+  <rect x="20" y="314" width="950" height="78" fill="#ffffff"/>
+  <text x="34" y="340" font-size="13.5" fill="#1a1a1a">
+    <tspan x="34" dy="0">Yen dkk. [19]</tspan>
+  </text>
+  <text x="216" y="340" font-size="13.5" fill="#1a1a1a">
+    <tspan x="216" dy="0">Radar medis dengan penilaian</tspan>
+    <tspan x="216" dy="19">kualitas sinyal pada pasien</tspan>
+    <tspan x="216" dy="19">rawat inap</tspan>
+  </text>
+  <text x="476" y="340" font-size="13.5" fill="#1a1a1a">
+    <tspan x="476" dy="0">Evaluasi tanda vital terhadap</tspan>
+    <tspan x="476" dy="19">perangkat referensi</tspan>
+  </text>
+  <text x="736" y="340" font-size="13.5" fill="#1a1a1a">
+    <tspan x="736" dy="0">Tidak membahas model FHIR</tspan>
+    <tspan x="736" dy="19">atau profil perangkat</tspan>
+  </text>
+
+  <!-- grid lines -->
+  <g stroke="#c8d2de" stroke-width="1" fill="none">
+    <rect x="20" y="8" width="950" height="384"/>
+    <line x1="20" y1="50" x2="970" y2="50"/>
+    <line x1="20" y1="138" x2="970" y2="138"/>
+    <line x1="20" y1="226" x2="970" y2="226"/>
+    <line x1="20" y1="314" x2="970" y2="314"/>
+    <line x1="202" y1="8" x2="202" y2="392"/>
+    <line x1="462" y1="8" x2="462" y2="392"/>
+    <line x1="722" y1="8" x2="722" y2="392"/>
+  </g>
+
+  <!-- category markers on left edge -->
+  <rect x="20" y="50" width="4" height="176" fill="#2e7d6e"/>
+  <rect x="20" y="226" width="4" height="166" fill="#a8532b"/>
+</svg>

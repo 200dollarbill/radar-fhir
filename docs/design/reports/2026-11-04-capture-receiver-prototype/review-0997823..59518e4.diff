@@ -1,0 +1,451 @@
+# Review package: 0997823..59518e4
+
+## Commits
+59518e4 feat(receiver): group samples into chunks and build Observations
+
+## Files changed
+ receiver/src/chunker.js            |  88 ++++++++++++++++++
+ receiver/src/observation.js        |  53 +++++++++++
+ receiver/tests/chunker.test.js     | 185 +++++++++++++++++++++++++++++++++++++
+ receiver/tests/observation.test.js |  88 ++++++++++++++++++
+ 4 files changed, 414 insertions(+)
+
+## Diff
+diff --git a/receiver/src/chunker.js b/receiver/src/chunker.js
+new file mode 100644
+index 0000000..b00e982
+--- /dev/null
++++ b/receiver/src/chunker.js
+@@ -0,0 +1,88 @@
++// Group samples into chunks of at most chunkSize entries per channel.
++// A gap inside a chunk is filled with "E" so the sample clock stays regular.
++// Plain ES module: runs unchanged in the browser and in Node.
++
++export const CHANNELS = ["I", "Q", "ax", "ay", "az", "gx", "gy", "gz"];
++const MAX_FILL = 999; // a larger gap starts a new segment
++
++export class Chunker {
++  constructor({ chunkSize = 1000, now = Date.now, onChunk } = {}) {
++    this.chunkSize = chunkSize;
++    this.now = now;
++    this.onChunk = onChunk;
++    this.segment = 0;
++    this.chunkIndex = 0;
++    this.lastIdx = null;
++    this.fs = null;
++    this.pendingRejected = 0;
++    this.deviceMissed = 0;
++    this._reset();
++  }
++
++  _reset() {
++    this.channels = Object.fromEntries(CHANNELS.map((c) => [c, []]));
++    this.gapSamples = 0;
++    this.startTimeMs = null;
++  }
++
++  noteRejected() {
++    this.pendingRejected += 1;
++  }
++
++  // `remaining` = fill entries still to add before the current real sample,
++  // counting the entry being added now when it is a fill.
++  _begin(remaining) {
++    if (this.startTimeMs === null) {
++      this.startTimeMs = this.now() - remaining * (1000 / this.fs);
++    }
++  }
++
++  _emitIfFull() {
++    if (this.channels.I.length >= this.chunkSize) this.flush();
++  }
++
++  addSample(sample) {
++    if (this.lastIdx !== null) {
++      const gap = sample.sampleIdx - this.lastIdx - 1;
++      if (gap < 0 || gap > MAX_FILL || sample.fs !== this.fs) {
++        this.flush();
++        this.segment += 1;
++        this.chunkIndex = 0;
++        this.lastIdx = null;
++      }
++    }
++    this.fs = sample.fs;
++    this.deviceMissed = sample.missed;
++    if (this.lastIdx !== null) {
++      const gap = sample.sampleIdx - this.lastIdx - 1;
++      for (let i = 0; i < gap; i++) {
++        this._begin(gap - i);
++        for (const c of CHANNELS) this.channels[c].push("E");
++        this.gapSamples += 1;
++        this._emitIfFull();
++      }
++    }
++    this._begin(0);
++    for (const c of CHANNELS) this.channels[c].push(sample[c]);
++    this.lastIdx = sample.sampleIdx;
++    this._emitIfFull();
++  }
++
++  flush() {
++    if (this.channels.I.length === 0) return;
++    const chunk = {
++      segment: this.segment,
++      chunkIndex: this.chunkIndex,
++      fs: this.fs,
++      startTimeMs: this.startTimeMs,
++      channels: this.channels,
++      gapSamples: this.gapSamples,
++      rejectedLines: this.pendingRejected,
++      deviceMissed: this.deviceMissed,
++    };
++    this.chunkIndex += 1;
++    this.pendingRejected = 0;
++    this._reset();
++    this.onChunk(chunk);
++  }
++}
+diff --git a/receiver/src/observation.js b/receiver/src/observation.js
+new file mode 100644
+index 0000000..9c972aa
+--- /dev/null
++++ b/receiver/src/observation.js
+@@ -0,0 +1,53 @@
++// Build the FHIR R4 raw-capture Observation for one chunk.
++// Numbers use JavaScript number-to-string; "E" marks a filled gap.
++
++const SYSTEM = "urn:prata:radar-signal";
++const UCUM = "http://unitsofmeasure.org";
++
++const COMPONENTS = [
++  ["I", "i-voltage", "V"], ["Q", "q-voltage", "V"],
++  ["ax", "accel-x", "[g]"], ["ay", "accel-y", "[g]"], ["az", "accel-z", "[g]"],
++  ["gx", "gyro-x", "deg/s"], ["gy", "gyro-y", "deg/s"], ["gz", "gyro-z", "deg/s"],
++];
++
++export function identifierValue(captureId, chunk) {
++  return `${captureId}-${chunk.segment}-${chunk.chunkIndex}`;
++}
++
++function isoSeconds(ms) {
++  return new Date(Math.floor(ms / 1000) * 1000).toISOString().replace(/\.\d+Z$/, "+00:00");
++}
++
++export function buildObservation(chunk, card, { captureId, source }) {
++  const period = 1000 / chunk.fs;
++  return {
++    resourceType: "Observation",
++    status: "final",
++    identifier: [{
++      system: `http://sys-ids.kemkes.go.id/organization/${card.org}`,
++      value: identifierValue(captureId, chunk),
++    }],
++    code: { coding: [{ system: SYSTEM, code: "raw-capture", display: "Raw radar I/Q capture" }] },
++    subject: { reference: card.patient },
++    encounter: { reference: card.encounter },
++    device: { reference: card.device },
++    effectiveDateTime: isoSeconds(chunk.startTimeMs),
++    note: [{
++      text: JSON.stringify({
++        source,
++        gap_samples: chunk.gapSamples,
++        rejected_lines: chunk.rejectedLines,
++        device_missed: chunk.deviceMissed,
++      }),
++    }],
++    component: COMPONENTS.map(([ch, code, unit]) => ({
++      code: { coding: [{ system: SYSTEM, code }] },
++      valueSampledData: {
++        origin: { value: 0, unit, system: UCUM, code: unit },
++        period,
++        dimensions: 1,
++        data: chunk.channels[ch].map(String).join(" "),
++      },
++    })),
++  };
++}
+diff --git a/receiver/tests/chunker.test.js b/receiver/tests/chunker.test.js
+new file mode 100644
+index 0000000..689cd10
+--- /dev/null
++++ b/receiver/tests/chunker.test.js
+@@ -0,0 +1,185 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import { Chunker } from "../src/chunker.js";
++
++const s = (idx, o = {}) => ({
++  sampleIdx: idx, fs: 100, missed: 0,
++  I: 1, Q: 2, ax: 0, ay: 0, az: 1, gx: 0, gy: 0, gz: 0, ...o,
++});
++function make(opts = {}) {
++  const chunks = [];
++  const c = new Chunker({ now: () => 1_000_000, onChunk: (k) => chunks.push(k), ...opts });
++  return { c, chunks };
++}
++const feed = (c, from, n) => { for (let i = 0; i < n; i++) c.addSample(s(from + i)); };
++
++test("1000 samples emit one chunk; chunk 2 gets index 1", () => {
++  const { c, chunks } = make();
++  feed(c, 0, 1000);
++  assert.equal(chunks.length, 1);
++  assert.equal(chunks[0].chunkIndex, 0);
++  assert.equal(chunks[0].segment, 0);
++  assert.equal(chunks[0].channels.I.length, 1000);
++  feed(c, 1000, 1000);
++  assert.equal(chunks.length, 2);
++  assert.equal(chunks[1].chunkIndex, 1);
++});
++
++test("gap of 3 fills 3 E in every channel and counts gapSamples 3", () => {
++  const { c, chunks } = make();
++  feed(c, 0, 2);
++  c.addSample(s(5));
++  c.flush();
++  const k = chunks[0];
++  assert.deepEqual(k.channels.I, [1, 1, "E", "E", "E", 1]);
++  for (const ch of Object.values(k.channels)) assert.equal(ch.length, 6);
++  assert.deepEqual(k.channels.gz, [0, 0, "E", "E", "E", 0]);
++  assert.equal(k.gapSamples, 3);
++});
++
++test("gap crossing a chunk boundary: both chunks 1000 long, none lost", () => {
++  const { c, chunks } = make();
++  feed(c, 0, 998);
++  c.addSample(s(1003)); // gap of 5: 2 fill fill the chunk, 3 start the next
++  feed(c, 1004, 996);
++  assert.equal(chunks.length, 2);
++  assert.equal(chunks[0].channels.I.length, 1000);
++  assert.equal(chunks[1].channels.I.length, 1000);
++  assert.equal(chunks[0].gapSamples, 2);
++  assert.equal(chunks[1].gapSamples, 3);
++  assert.deepEqual(chunks[1].channels.I.slice(0, 4), ["E", "E", "E", 1]);
++  assert.equal(chunks[0].segment, chunks[1].segment);
++});
++
++test("gap of 999 fills; gap of 1000 starts a new segment", () => {
++  const a = make();
++  a.c.addSample(s(0));
++  a.c.addSample(s(1000)); // gap 999
++  assert.equal(a.chunks.length, 1); // 1 + 999 fill = 1000 -> emitted
++  a.c.flush();
++  assert.equal(a.chunks.length, 2);
++  assert.equal(a.chunks[0].gapSamples, 999);
++  assert.equal(a.chunks[1].segment, 0);
++
++  const b = make();
++  b.c.addSample(s(0));
++  b.c.addSample(s(1001)); // gap 1000
++  b.c.flush();
++  assert.equal(b.chunks.length, 2);
++  assert.equal(b.chunks[0].channels.I.length, 1);
++  assert.equal(b.chunks[1].segment, 1);
++  assert.equal(b.chunks[1].chunkIndex, 0);
++  assert.equal(b.chunks[1].gapSamples, 0);
++});
++
++test("sample_idx going backwards flushes and starts segment+1, chunkIndex 0", () => {
++  const { c, chunks } = make();
++  feed(c, 10, 5);
++  feed(c, 0, 3);
++  c.flush();
++  assert.equal(chunks.length, 2);
++  assert.equal(chunks[0].channels.I.length, 5);
++  assert.equal(chunks[1].segment, 1);
++  assert.equal(chunks[1].chunkIndex, 0);
++  assert.equal(chunks[1].channels.I.length, 3);
++});
++
++test("repeated sample_idx starts a new segment", () => {
++  const { c, chunks } = make();
++  c.addSample(s(4));
++  c.addSample(s(4));
++  c.flush();
++  assert.equal(chunks.length, 2);
++  assert.equal(chunks[1].segment, 1);
++});
++
++test("fs change flushes and starts a new segment", () => {
++  const { c, chunks } = make();
++  feed(c, 0, 3);
++  c.addSample(s(3, { fs: 250 }));
++  c.flush();
++  assert.equal(chunks.length, 2);
++  assert.equal(chunks[0].fs, 100);
++  assert.equal(chunks[1].fs, 250);
++  assert.equal(chunks[1].segment, 1);
++  assert.equal(chunks[1].gapSamples, 0);
++});
++
++test("first sample at any index causes no gap", () => {
++  const { c, chunks } = make();
++  c.addSample(s(123456));
++  c.flush();
++  assert.equal(chunks[0].channels.I.length, 1);
++  assert.equal(chunks[0].gapSamples, 0);
++  assert.equal(chunks[0].segment, 0);
++});
++
++test("flush emits a partial chunk; flush with nothing emits nothing", () => {
++  const { c, chunks } = make();
++  c.flush();
++  assert.equal(chunks.length, 0);
++  feed(c, 0, 7);
++  c.flush();
++  assert.equal(chunks.length, 1);
++  assert.equal(chunks[0].channels.Q.length, 7);
++  c.flush();
++  assert.equal(chunks.length, 1);
++});
++
++test("noteRejected counts on the next emitted chunk, then resets", () => {
++  const { c, chunks } = make();
++  c.noteRejected(); c.noteRejected();
++  feed(c, 0, 2);
++  c.flush();
++  feed(c, 2, 2);
++  c.flush();
++  assert.equal(chunks[0].rejectedLines, 2);
++  assert.equal(chunks[1].rejectedLines, 0);
++});
++
++test("rejected count survives an empty flush", () => {
++  const { c, chunks } = make();
++  c.noteRejected();
++  c.flush();
++  assert.equal(chunks.length, 0);
++  feed(c, 0, 1);
++  c.flush();
++  assert.equal(chunks[0].rejectedLines, 1);
++});
++
++test("all channels have equal length in every emitted chunk", () => {
++  const { c, chunks } = make({ chunkSize: 10 });
++  feed(c, 0, 7);
++  c.addSample(s(30));
++  feed(c, 31, 5);
++  c.flush();
++  assert.ok(chunks.length >= 3);
++  for (const k of chunks) {
++    const lens = new Set(Object.values(k.channels).map((a) => a.length));
++    assert.equal(lens.size, 1);
++    assert.deepEqual(Object.keys(k.channels), ["I", "Q", "ax", "ay", "az", "gx", "gy", "gz"]);
++  }
++});
++
++test("deviceMissed is the latest sample's missed", () => {
++  const { c, chunks } = make();
++  c.addSample(s(0, { missed: 2 }));
++  c.addSample(s(1, { missed: 5 }));
++  c.flush();
++  assert.equal(chunks[0].deviceMissed, 5);
++});
++
++test("startTimeMs back-dates by leading gap entries", () => {
++  const { c, chunks } = make({ chunkSize: 4 });
++  feed(c, 0, 3);
++  c.addSample(s(8)); // last idx 2, so gap 5
++  c.flush();
++  // chunk 2 begins with 4 fill entries, 1 fill + real? see below
++  // chunk 1: samples 0,1,2 + fill -> full. chunk 2: 4 fill -> full. chunk 3: real.
++  assert.equal(chunks.length, 3);
++  assert.equal(chunks[0].startTimeMs, 1_000_000);
++  // chunk 2 first entry is a fill with 4 fill entries remaining (incl. itself): 4 * 10 ms
++  // gap = 8 - 2 - 1 = 5; 1 went to chunk 1; 4 remain.
++  assert.equal(chunks[1].startTimeMs, 1_000_000 - 40);
++  assert.equal(chunks[2].startTimeMs, 1_000_000);
++});
+diff --git a/receiver/tests/observation.test.js b/receiver/tests/observation.test.js
+new file mode 100644
+index 0000000..3063ee0
+--- /dev/null
++++ b/receiver/tests/observation.test.js
+@@ -0,0 +1,88 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import { buildObservation, identifierValue } from "../src/observation.js";
++
++const card = {
++  token: "t", patient: "Patient/p1", encounter: "Encounter/e1",
++  device: "Device/d1", org: "org9", label: "x",
++};
++const chunk = (o = {}) => ({
++  segment: 2, chunkIndex: 5, fs: 100, startTimeMs: Date.UTC(2026, 10, 4, 1, 2, 3, 999),
++  channels: {
++    I: [1.65, "E", 1.649], Q: [2, 2, 2], ax: [0, 0, 0], ay: [0, 0, 0], az: [1, 1, 1],
++    gx: [0, 0, 0], gy: [0, 0, 0], gz: [0, 0, 0],
++  },
++  gapSamples: 1, rejectedLines: 4, deviceMissed: 7, ...o,
++});
++const opts = { captureId: "cap-abc", source: "serial" };
++
++test("code, identifier, references and component order match the spec", () => {
++  const o = buildObservation(chunk(), card, opts);
++  assert.equal(o.resourceType, "Observation");
++  assert.equal(o.status, "final");
++  assert.deepEqual(o.identifier, [{
++    system: "http://sys-ids.kemkes.go.id/organization/org9", value: "cap-abc-2-5",
++  }]);
++  assert.equal(identifierValue("cap-abc", chunk()), "cap-abc-2-5");
++  assert.deepEqual(o.code, { coding: [{
++    system: "urn:prata:radar-signal", code: "raw-capture", display: "Raw radar I/Q capture",
++  }] });
++  assert.deepEqual(o.subject, { reference: "Patient/p1" });
++  assert.deepEqual(o.encounter, { reference: "Encounter/e1" });
++  assert.deepEqual(o.device, { reference: "Device/d1" });
++  assert.deepEqual(
++    o.component.map((c) => c.code.coding[0].code),
++    ["i-voltage", "q-voltage", "accel-x", "accel-y", "accel-z", "gyro-x", "gyro-y", "gyro-z"],
++  );
++  for (const c of o.component) {
++    assert.equal(c.code.coding[0].system, "urn:prata:radar-signal");
++    assert.equal(c.valueSampledData.dimensions, 1);
++    assert.equal(c.valueSampledData.origin.value, 0);
++    assert.equal(c.valueSampledData.origin.system, "http://unitsofmeasure.org");
++  }
++});
++
++test("note parses to {source, gap_samples, rejected_lines, device_missed}", () => {
++  const o = buildObservation(chunk(), card, opts);
++  assert.equal(o.note.length, 1);
++  assert.deepEqual(JSON.parse(o.note[0].text),
++    { source: "serial", gap_samples: 1, rejected_lines: 4, device_missed: 7 });
++  assert.equal(o.note[0].text,
++    '{"source":"serial","gap_samples":1,"rejected_lines":4,"device_missed":7}');
++});
++
++test("period is 10 at fs 100 and 4 at fs 250", () => {
++  assert.equal(buildObservation(chunk(), card, opts).component[0].valueSampledData.period, 10);
++  assert.equal(buildObservation(chunk({ fs: 250 }), card, opts).component[0].valueSampledData.period, 4);
++});
++
++test("data joins numbers and E with single spaces", () => {
++  const o = buildObservation(chunk(), card, opts);
++  assert.equal(o.component[0].valueSampledData.data, "1.65 E 1.649");
++  assert.equal(o.component[1].valueSampledData.data, "2 2 2");
++});
++
++test("origin unit and UCUM code per channel: V, [g], deg/s", () => {
++  const o = buildObservation(chunk(), card, opts);
++  const units = o.component.map((c) => [c.valueSampledData.origin.unit, c.valueSampledData.origin.code]);
++  assert.deepEqual(units, [
++    ["V", "V"], ["V", "V"], ["[g]", "[g]"], ["[g]", "[g]"], ["[g]", "[g]"],
++    ["deg/s", "deg/s"], ["deg/s", "deg/s"], ["deg/s", "deg/s"],
++  ]);
++});
++
++test("effectiveDateTime has the form YYYY-MM-DDThh:mm:ss+00:00", () => {
++  const o = buildObservation(chunk(), card, opts);
++  assert.equal(o.effectiveDateTime, "2026-11-04T01:02:03+00:00");
++});
++
++test("no category and no top-level value", () => {
++  const o = buildObservation(chunk(), card, opts);
++  assert.equal("category" in o, false);
++  assert.equal(Object.keys(o).some((k) => k.startsWith("value")), false);
++});
++
++test("SIMULATED source appears in note", () => {
++  const o = buildObservation(chunk(), card, { captureId: "cap-abc", source: "SIMULATED" });
++  assert.equal(JSON.parse(o.note[0].text).source, "SIMULATED");
++});

@@ -24,3 +24,24 @@ def get(conn, account_id):
 def list(conn):
     return [dict(r) for r in conn.execute(
         "SELECT * FROM accounts WHERE active=1")]
+
+
+def set_password(conn, username, password_hash) -> bool:
+    cur = conn.execute(
+        "UPDATE accounts SET password_hash=? WHERE username=? AND active=1",
+        (password_hash, username))
+    conn.commit()
+    return cur.rowcount > 0
+
+
+def list_all(conn):
+    """Every account, active or not, ordered by username."""
+    return [dict(r) for r in conn.execute(
+        "SELECT * FROM accounts ORDER BY username")]
+
+
+def set_active(conn, username, active) -> bool:
+    cur = conn.execute("UPDATE accounts SET active=? WHERE username=?",
+                       (1 if active else 0, username))
+    conn.commit()
+    return cur.rowcount > 0

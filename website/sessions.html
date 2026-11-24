@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sessions</title>
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+<nav class="top" id="topnav" aria-label="Site">
+  <span class="brand">PRATA</span>
+  <ul><li><a href="sessions.html" aria-current="page">Sessions</a></li><li><a href="./">Capture</a></li><li><a href="review.html">Review</a></li></ul>
+  <span class="user"><a href="sessions.html">Log in</a></span>
+</nav>
+<main>
+<p id="load-error" class="notice warn" role="alert" hidden></p>
+<h1>Sessions</h1>
+
+<section id="login-panel" class="panel" hidden aria-labelledby="h-login">
+  <h2 id="h-login">Log in</h2>
+  <p class="muted">For admins and doctors. Test patients only; no real patient data.</p>
+  <form id="login-form" class="stack">
+    <label>Username <input id="username" autocomplete="username" required></label>
+    <label>Password <input id="password" type="password" autocomplete="current-password" required></label>
+    <div><button class="primary" type="submit">Log in</button></div>
+  </form>
+  <p id="login-error" class="error" role="alert"></p>
+</section>
+
+<p id="not-staff" class="notice warn" hidden>This page is for admins and doctors.</p>
+
+<div id="dashboard" hidden>
+  <section class="panel" aria-labelledby="h-open">
+    <h2 id="h-open">Open sessions</h2>
+    <p class="muted">A session is one visit with one board assigned. The capture page gets it from the board
+      that is plugged in. End a session only after the capture page shows <em>✓ Saved</em>.</p>
+    <table>
+      <thead><tr><th>Label</th><th>Patient</th><th>Board</th><th>Doctor</th><th>Started</th><th></th></tr></thead>
+      <tbody id="open-rows"></tbody>
+    </table>
+    <p id="open-empty" class="muted">No open sessions.</p>
+  </section>
+
+  <div class="grid">
+    <section class="panel" aria-labelledby="h-new">
+      <h2 id="h-new">Open a session</h2>
+      <form id="session-form" class="stack">
+        <label>Patient <select id="patient" required></select></label>
+        <label>Board <select id="board" required></select></label>
+        <label>Label <input id="label" pattern="[A-Za-z0-9\-]{1,32}" maxlength="32" required
+          placeholder="S001" title="1 to 32 letters, digits or hyphens"></label>
+        <label id="doctor-field" hidden>Doctor <select id="doctor"></select></label>
+        <div><button class="primary" type="submit">Open session</button></div>
+      </form>
+      <p id="session-msg" class="muted"></p>
+    </section>
+
+    <section class="panel" id="patients-panel" aria-labelledby="h-pat" hidden>
+      <h2 id="h-pat">Test patients</h2>
+      <p class="muted">Creates a synthetic patient named <em>Sesi &lt;label&gt;</em> with a generated test NIK.</p>
+      <form id="patient-form" class="stack">
+        <label>Label <input id="patient-label" pattern="[A-Za-z0-9\-]{1,32}" maxlength="32" required placeholder="S001"></label>
+        <div><button type="submit">Create test patient</button></div>
+      </form>
+      <p id="patient-msg" class="muted"></p>
+    </section>
+  </div>
+
+  <section class="panel" aria-labelledby="h-boards">
+    <h2 id="h-boards">Boards</h2>
+    <p class="muted">An admin registers a board on the Capture page: connect it, then click <em>Register this board</em>.</p>
+    <table>
+      <thead><tr><th>Board</th><th>Kind</th><th>Registered</th><th>Current session</th></tr></thead>
+      <tbody id="board-rows"></tbody>
+    </table>
+    <p id="boards-empty" class="muted">No boards registered yet.</p>
+  </section>
+
+  <section class="panel" aria-labelledby="h-history">
+    <h2 id="h-history">Ended sessions</h2>
+    <table>
+      <thead><tr><th>Label</th><th>Patient</th><th>Board</th><th>Doctor</th><th>Started</th><th>Ended</th></tr></thead>
+      <tbody id="ended-rows"></tbody>
+    </table>
+    <p id="ended-empty" class="muted">None yet.</p>
+  </section>
+</div>
+
+<p id="error" class="error" role="alert"></p>
+</main>
+<script src="guard.js"></script>
+<script type="module" src="sessions.js"></script>
+</body>
+</html>

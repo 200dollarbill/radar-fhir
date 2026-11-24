@@ -1,0 +1,423 @@
+# Review package: f49227b..45bc75d
+
+## Commits
+45bc75d feat(server): conditional create for Observation retries
+
+## Files changed
+ fhir_server/app.py                   |   3 +
+ fhir_server/db.py                    |   3 +
+ fhir_server/routes/fhir.py           |  12 +-
+ fhir_server/services/fhir_service.py |  60 ++++++++++
+ tests/test_conditional_create.py     | 225 +++++++++++++++++++++++++++++++++++
+ 5 files changed, 301 insertions(+), 2 deletions(-)
+
+## Diff
+diff --git a/fhir_server/app.py b/fhir_server/app.py
+index b43fa8c..985648c 100644
+--- a/fhir_server/app.py
++++ b/fhir_server/app.py
+@@ -18,20 +18,23 @@ def capability_statement(settings) -> dict:
+         "status": "token", "participant": "reference",
+         "organization": "reference",
+     }
+     resources_out = [{
+         "type": rtype,
+         "interaction": [{"code": c} for c in
+                         ("read", "search-type", "create", "update", "delete")],
+         "searchParam": [{"code": p, "type": param_types.get(p, "token")}
+                         for p in sorted(params) if p != "id"],
+     } for rtype, params in SUPPORTED_PARAMS.items()]
++    for entry in resources_out:
++        if entry["type"] == "Observation":
++            entry["conditionalCreate"] = True
+     return {
+         "resourceType": "CapabilityStatement",
+         "status": "active",
+         "date": dt.datetime.now(dt.timezone.utc).strftime(
+             "%Y-%m-%dT%H:%M:%S+00:00"),
+         "kind": "instance",
+         "fhirVersion": "4.0.1",
+         "format": ["application/fhir+json", "application/json"],
+         "software": {"name": "PRATA FHIR server", "version": "0.1.0"},
+         "implementation": {
+diff --git a/fhir_server/db.py b/fhir_server/db.py
+index 550db31..358b31d 100644
+--- a/fhir_server/db.py
++++ b/fhir_server/db.py
+@@ -6,20 +6,23 @@ CREATE TABLE IF NOT EXISTS resources (
+     json TEXT NOT NULL, created TEXT NOT NULL, updated TEXT NOT NULL,
+     PRIMARY KEY (type, id));
+ CREATE TABLE IF NOT EXISTS accounts (
+     id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE,
+     password_hash TEXT NOT NULL, role TEXT NOT NULL,
+     subject_ref TEXT, active INTEGER NOT NULL DEFAULT 1);
+ CREATE TABLE IF NOT EXISTS device_tokens (
+     id TEXT PRIMARY KEY, device_id TEXT NOT NULL, patient_id TEXT NOT NULL,
+     token_sha256 TEXT NOT NULL UNIQUE, created TEXT NOT NULL,
+     revoked INTEGER NOT NULL DEFAULT 0);
++CREATE TABLE IF NOT EXISTS conditional_keys (
++    type TEXT NOT NULL, identifier_value TEXT NOT NULL,
++    resource_id TEXT NOT NULL, PRIMARY KEY (type, identifier_value));
+ """
+ 
+ 
+ def connect(db_path: str) -> sqlite3.Connection:
+     # One shared connection for the app's single event loop; FastAPI serves
+     # routes on a different thread than create_app ran on, so pinning to the
+     # creating thread would raise ProgrammingError.
+     conn = sqlite3.connect(db_path, check_same_thread=False)
+     conn.row_factory = sqlite3.Row
+     conn.execute("PRAGMA foreign_keys = ON")
+diff --git a/fhir_server/routes/fhir.py b/fhir_server/routes/fhir.py
+index beef56a..48a9b4a 100644
+--- a/fhir_server/routes/fhir.py
++++ b/fhir_server/routes/fhir.py
+@@ -90,22 +90,30 @@ async def search(type_: str, request: Request):
+     except (FhirError, AuthzError) as exc:
+         return _error(exc)
+ 
+ 
+ @router.post("/{type_}")
+ async def create(type_: str, request: Request):
+     try:
+         _check_media(request)
+         _check_type(type_)
+         svc, principal = get_service(request), get_principal(request)
+-        rid, doc, version = svc.create(principal, type_,
+-                                       await _payload(request))
++        payload = await _payload(request)
++        cond = request.headers.get("If-None-Exist")
++        if cond is not None:
++            rid, doc, created = svc.conditional_create(principal, type_,
++                                                       payload, cond)
++            version = res.get_version(svc.conn, type_, rid) or 1
++            return _json(doc, status=201 if created else 200, headers={
++                "Location": f"/fhir-r4/v1/{type_}/{rid}",
++                "ETag": f'W/"{version}"'})
++        rid, doc, version = svc.create(principal, type_, payload)
+         return _json(doc, status=201, headers={
+             "Location": f"/fhir-r4/v1/{type_}/{rid}",
+             "ETag": f'W/"{version}"'})
+     except (FhirError, AuthzError) as exc:
+         return _error(exc)
+ 
+ 
+ @router.get("/{type_}/{rid}")
+ async def read(type_: str, rid: str, request: Request):
+     try:
+diff --git a/fhir_server/services/fhir_service.py b/fhir_server/services/fhir_service.py
+index df797b2..e0a66b7 100644
+--- a/fhir_server/services/fhir_service.py
++++ b/fhir_server/services/fhir_service.py
+@@ -156,20 +156,80 @@ class FhirService:
+         if resource_type == "Encounter":
+             doc = _ensure_participant(doc, principal)
+         if res.exists(self.conn, resource_type, new_id):
+             raise FhirError([Issue(
+                 code="duplicate",
+                 details_text=f"Id collision: {resource_type}/{new_id}"
+                              " already exists (refusing to overwrite)")], 409)
+         res.put(self.conn, resource_type, new_id, doc)
+         return new_id, res.get(self.conn, resource_type, new_id), 1
+ 
++    @staticmethod
++    def _parse_if_none_exist(header):
++        def bad(msg):
++            return FhirError([Issue(code="value", details_text=msg,
++                                    expression="If-None-Exist")], 400)
++        parts = (header or "").split("&")
++        if len(parts) != 1 or not parts[0].startswith("identifier="):
++            raise bad("If-None-Exist must be exactly one identifier=value"
++                      " parameter")
++        raw = parts[0][len("identifier="):]
++        value = raw.partition("|")[2] if "|" in raw else raw
++        if not value:
++            raise bad("If-None-Exist identifier value is empty")
++        return value
++
++    def conditional_create(self, principal, resource_type, payload,
++                           if_none_exist):
++        """Observation retry-safe create keyed on identifier.value.
++        Returns (id, doc, created)."""
++        value = self._parse_if_none_exist(if_none_exist)
++        if resource_type != "Observation":
++            raise FhirError([Issue(
++                code="not-supported",
++                details_text="Conditional create is supported for Observation"
++                             " only", expression="If-None-Exist")], 400)
++        idents = payload.get("identifier") if isinstance(payload, dict) else None
++        if not isinstance(idents, list) or not any(
++                isinstance(i, dict) and i.get("value") == value
++                for i in idents):
++            raise FhirError([Issue(
++                code="value",
++                details_text="If-None-Exist identifier value must equal an"
++                             " identifier.value in the payload",
++                expression="If-None-Exist")], 400)
++        row = self.conn.execute(
++            "SELECT resource_id FROM conditional_keys"
++            " WHERE type=? AND identifier_value=?",
++            (resource_type, value)).fetchone()
++        if row is not None:
++            existing = res.get(self.conn, resource_type, row["resource_id"])
++            if existing is not None:
++                # authorize against the stored row, before validation, so a
++                # retry still succeeds after the Encounter has finished
++                try:
++                    authz.check(principal, "read", resource_type, existing,
++                                conn=self.conn)
++                except AuthzError as exc:
++                    raise _as_fhir_error(exc) from exc
++                return row["resource_id"], existing, False
++            self.conn.execute(
++                "DELETE FROM conditional_keys WHERE type=? AND"
++                " identifier_value=?", (resource_type, value))
++            self.conn.commit()
++        new_id, doc, _ = self.create(principal, resource_type, payload)
++        self.conn.execute(
++            "INSERT INTO conditional_keys VALUES (?,?,?)",
++            (resource_type, value, new_id))
++        self.conn.commit()
++        return new_id, doc, True
++
+     def read(self, principal, resource_type, id_):
+         doc = res.get(self.conn, resource_type, id_)
+         if doc is None:
+             raise FhirError([Issue(code="not-found",
+                                    details_text=f"{resource_type}/{id_} not found")],
+                             404)
+         try:
+             authz.check(principal, "read", resource_type, doc, conn=self.conn)
+         except AuthzError as exc:
+             raise _as_fhir_error(exc) from exc
+diff --git a/tests/test_conditional_create.py b/tests/test_conditional_create.py
+new file mode 100644
+index 0000000..6da7920
+--- /dev/null
++++ b/tests/test_conditional_create.py
+@@ -0,0 +1,225 @@
++import json
++import os
++import subprocess
++import sys
++
++import pytest
++from fastapi.testclient import TestClient
++
++from fhir_server.app import create_app
++from fhir_server.config import Settings
++from fhir_server.repositories import resources
++from fhir_server.validation.rules_observation import RAW_CODE, RAW_SYSTEM
++
++SECRET = "cc-secret-0123456789-0123456789abcdef"
++UCUM = "http://unitsofmeasure.org"
++URL = "/fhir-r4/v1/Observation"
++COMPONENTS = [("i-voltage", "V"), ("q-voltage", "V"),
++              ("accel-x", "[g]"), ("accel-y", "[g]"), ("accel-z", "[g]"),
++              ("gyro-x", "deg/s"), ("gyro-y", "deg/s"), ("gyro-z", "deg/s")]
++
++
++def _comp(code, unit):
++    return {"code": {"coding": [{"system": RAW_SYSTEM, "code": code}]},
++            "valueSampledData": {
++                "origin": {"value": 0, "unit": unit, "system": UCUM,
++                           "code": unit},
++                "period": 10, "dimensions": 1, "data": "1.65 1.66 1.67"}}
++
++
++def _login(c, u, pw):
++    r = c.post("/auth/token", json={"username": u, "password": pw})
++    assert r.status_code == 200, r.text
++    return {"Authorization": f"Bearer {r.json()['access_token']}"}
++
++
++@pytest.fixture
++def env(db_path):
++    e = dict(os.environ, FHIR_DB_PATH=db_path, FHIR_JWT_SECRET=SECRET,
++             FHIR_ADMIN_PASSWORD="adm-pw")
++    p = subprocess.run([sys.executable, "-m", "fhir_server", "seed", "--reset"],
++                       capture_output=True, text=True, env=e, cwd=os.getcwd())
++    assert p.returncode == 0, p.stderr
++    s = json.loads(p.stdout.strip().splitlines()[-1])
++    app = create_app(Settings(db_path=db_path, jwt_secret=SECRET))
++    with TestClient(app) as c:
++        admin = _login(c, "admin", s["admin_password"])
++        doc = _login(c, "doctor", s["doctor_password"])
++        r = c.post("/fhir-r4/v1/Encounter", headers=doc, json={
++            "resourceType": "Encounter",
++            "identifier": [{"use": "official",
++                            "system": "http://sys-ids.kemkes.go.id/encounter/"
++                                      f"{s['org_id']}",
++                            "value": "KUNJ-CC"}],
++            "status": "arrived",
++            "statusHistory": [{"status": "arrived", "period": {
++                "start": "2026-09-29T10:00:00+00:00"}}],
++            "class": {"system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
++                      "code": "AMB", "display": "ambulatory"},
++            "subject": {"reference": f"Patient/{s['patient_id']}"},
++            "period": {"start": "2026-09-29T10:00:00+00:00"},
++            "location": [{"location": {
++                "reference": f"Location/{s['location_id']}"}}],
++            "serviceProvider": {"reference": f"Organization/{s['org_id']}"},
++        })
++        assert r.status_code == 201, r.text
++        enc = r.json()
++        enc_id = enc["id"]
++        enc["status"] = "in-progress"
++        enc["statusHistory"] = [
++            {"status": "arrived",
++             "period": {"start": "2026-09-29T10:00:00+00:00"}},
++            {"status": "in-progress",
++             "period": {"start": "2026-09-29T10:05:00+00:00"}}]
++        r = c.put(f"/fhir-r4/v1/Encounter/{enc_id}", headers=doc, json=enc)
++        assert r.status_code == 200, r.text
++        r = c.post(f"/fhir-r4/v1/Device/{s['device_id']}/$provision",
++                   headers=admin, json={"patient": f"Patient/{s['patient_id']}"})
++        dev_tok = {"Authorization": f"Bearer {r.json()['token']}"}
++        # a second device assigned to the same patient
++        resources.put(c.app.state.conn, "Device", "dev-other",
++                      {"resourceType": "Device", "id": "dev-other",
++                       "status": "active"})
++        r = c.post("/fhir-r4/v1/Device/dev-other/$provision", headers=admin,
++                   json={"patient": f"Patient/{s['patient_id']}"})
++        assert r.status_code == 200, r.text
++        other_tok = {"Authorization": f"Bearer {r.json()['token']}"}
++        yield {"c": c, "s": s, "enc_id": enc_id, "dev": dev_tok,
++               "other": other_tok, "admin": admin, "doc": doc}
++
++
++def chunk(env, value="cap-1-0", device=None):
++    s = env["s"]
++    return {
++        "resourceType": "Observation", "status": "final",
++        "code": {"coding": [{"system": RAW_SYSTEM, "code": RAW_CODE,
++                             "display": "Raw radar I/Q capture"}]},
++        "subject": {"reference": f"Patient/{s['patient_id']}"},
++        "encounter": {"reference": f"Encounter/{env['enc_id']}"},
++        "effectiveDateTime": "2026-09-29T10:06:00+00:00",
++        "device": {"reference": f"Device/{device or s['device_id']}"},
++        "identifier": [{"system": "http://sys-ids.kemkes.go.id/observation/"
++                                  f"{s['org_id']}", "value": value}],
++        "component": [_comp(c, u) for c, u in COMPONENTS],
++    }
++
++
++def post(env, body, who="dev", header=None):
++    h = dict(env[who])
++    if header is not None:
++        h["If-None-Exist"] = header
++    return env["c"].post(URL, headers=h, json=body)
++
++
++def count(env):
++    return len(resources.list(env["c"].app.state.conn, "Observation"))
++
++
++def test_first_post_201_second_200_same_id(env):
++    r1 = post(env, chunk(env), header="identifier=cap-1-0")
++    r2 = post(env, chunk(env), header="identifier=cap-1-0")
++    assert r1.status_code == 201, r1.text
++    assert r2.status_code == 200, r2.text
++    assert r1.json()["id"] == r2.json()["id"]
++
++
++def test_second_post_stores_no_new_row(env):
++    post(env, chunk(env), header="identifier=cap-1-0")
++    post(env, chunk(env), header="identifier=cap-1-0")
++    assert count(env) == 1
++
++
++def test_system_pipe_value_form_matches_value_only_key(env):
++    post(env, chunk(env), header="identifier=cap-1-0")
++    sysv = "http://sys-ids.kemkes.go.id/observation/" + env["s"]["org_id"]
++    r = post(env, chunk(env), header=f"identifier={sysv}|cap-1-0")
++    assert r.status_code == 200, r.text
++
++
++def test_retry_after_encounter_finished_returns_200(env):
++    r1 = post(env, chunk(env), header="identifier=cap-1-0")
++    assert r1.status_code == 201
++    c, doc = env["c"], env["doc"]
++    e = c.get(f"/fhir-r4/v1/Encounter/{env['enc_id']}", headers=doc).json()
++    e["status"] = "finished"
++    e["statusHistory"] = e["statusHistory"] + [
++        {"status": "finished",
++         "period": {"start": "2026-09-29T10:05:00+00:00",
++                    "end": "2026-09-29T11:00:00+00:00"}}]
++    e["period"]["end"] = "2026-09-29T11:00:00+00:00"
++    assert c.put(f"/fhir-r4/v1/Encounter/{env['enc_id']}", headers=doc,
++                 json=e).status_code == 200
++    r2 = post(env, chunk(env), header="identifier=cap-1-0")
++    assert r2.status_code == 200, r2.text
++    assert r2.json()["id"] == r1.json()["id"]
++
++
++def test_other_device_gets_403_not_the_record(env):
++    post(env, chunk(env), header="identifier=cap-1-0")
++    r = post(env, chunk(env, device="dev-other"), who="other",
++             header="identifier=cap-1-0")
++    assert r.status_code == 403, r.text
++    assert r.json()["resourceType"] == "OperationOutcome"
++    assert "component" not in r.text
++
++
++def test_header_param_other_than_identifier_400(env):
++    r = post(env, chunk(env), header="code=cap-1-0")
++    assert r.status_code == 400
++
++
++@pytest.mark.parametrize("h", ["identifier", "identifier=", "identifier=a&identifier=b"])
++def test_malformed_header_400(env, h):
++    r = post(env, chunk(env), header=h)
++    assert r.status_code == 400
++    assert r.json()["resourceType"] == "OperationOutcome"
++
++
++def test_header_value_not_in_payload_400(env):
++    r = post(env, chunk(env, value="cap-1-0"), header="identifier=cap-9-9")
++    assert r.status_code == 400
++    assert count(env) == 0
++
++
++def test_non_observation_type_400(env):
++    r = env["c"].post("/fhir-r4/v1/Organization",
++                      headers={**env["admin"], "If-None-Exist": "identifier=x"},
++                      json={"resourceType": "Organization", "name": "K",
++                            "identifier": [{"value": "x"}]})
++    assert r.status_code == 400
++
++
++def test_invalid_payload_400_records_no_key(env):
++    bad = chunk(env)
++    bad["component"] = bad["component"][1:]  # drops i-voltage
++    r = post(env, bad, header="identifier=cap-1-0")
++    assert r.status_code == 400
++    r = post(env, chunk(env), header="identifier=cap-1-0")
++    assert r.status_code == 201, r.text
++
++
++def test_key_of_deleted_resource_creates_again(env):
++    r1 = post(env, chunk(env), header="identifier=cap-1-0")
++    d = env["c"].delete(f"{URL}/{r1.json()['id']}", headers=env["admin"])
++    assert d.status_code == 204
++    r2 = post(env, chunk(env), header="identifier=cap-1-0")
++    assert r2.status_code == 201, r2.text
++    assert r2.json()["id"] != r1.json()["id"]
++
++
++def test_plain_post_may_reuse_identifier(env):
++    assert post(env, chunk(env, value="radar-1")).status_code == 201
++    assert post(env, chunk(env, value="radar-1")).status_code == 201
++
++
++def test_plain_post_ignores_conditional_keys(env):
++    assert post(env, chunk(env, value="radar-1"),
++                header="identifier=radar-1").status_code == 201
++    assert post(env, chunk(env, value="radar-1")).status_code == 201
++    assert count(env) == 2
++
++
++def test_capability_statement_advertises_conditional_create(env):
++    body = env["c"].get("/fhir-r4/v1/metadata").json()
++    obs = [r for r in body["rest"][0]["resource"] if r["type"] == "Observation"][0]
++    assert obs["conditionalCreate"] is True
