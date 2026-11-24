@@ -16,7 +16,7 @@ def test_citation_range():
 
 
 def test_citation_ok():
-    assert check("Bukti [1][41].") == []
+    assert check("Bukti [1], [41].") == []
 
 
 def test_new_marker():
@@ -49,3 +49,32 @@ def test_allow_marker():
 
 def test_allow_marker_only_named_word():
     assert check("Diagnosis dan prediksi. <!-- check:ok diagnosis -->")
+
+
+def test_adjacent_citations():
+    assert any("citation" in p for p in check("Bukti [5][6]."))
+
+
+def test_spaced_dash():
+    assert any("dash" in p for p in check("Antara 1,2 - 1,4 juta."))
+
+
+def test_digit_hyphen():
+    assert any("dash" in p for p in check("Periode 2020-2026."))
+
+
+def test_inflected_banned():
+    for w in ("memprediksi", "memantau", "mendiagnosis"):
+        assert any("banned" in p for p in check(f"Sistem ini {w} pasien.")), w
+
+
+def test_tidak_hanya_is_not_negation():
+    assert check("Sistem tidak hanya diagnosis.")
+
+
+def test_plain_bibliography_heading_stops():
+    assert check("DAFTAR PUSTAKA\n[50] A-B") == []
+
+
+def test_fhir_resource_name_allowed():
+    assert check("Resource Observation dan DiagnosticReport dipakai.") == []

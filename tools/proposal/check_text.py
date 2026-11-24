@@ -8,22 +8,35 @@ import sys
 import zipfile
 
 BANNED = ("diagnosa", "diagnosis", "prediksi", "monitoring", "pemantauan")
+BANNED_STEMS = ("diagnos", "prediks", "pantau", "mantau")
 NEGATORS = {"bukan", "tidak", "tanpa", "not", "no", "never"}
-DASH = re.compile(r"(?<=[A-Za-z])-(?=[A-Za-z])|[–—]")
+DASH = re.compile(r"(?<=[A-Za-z0-9])-(?=[A-Za-z0-9])|\s-\s|[–—]")
 CITE = re.compile(r"\[(\d+|new)\]")
+ADJ = re.compile(r"\[\d+\]\[\d+\]")
 CODE = re.compile(r"`[^`]*`")
 ALLOW = re.compile(r"<!--\s*check:ok\s+([^>]*?)\s*-->")
 WORD = re.compile(r"[A-Za-z]+")
 
 
 def _negated(words, i):
-    return any(w in NEGATORS for w in words[max(0, i - 4):i])
+    win = words[max(0, i - 4):i]
+    return any(w in NEGATORS and not (k + 1 < len(win) and win[k + 1] == "hanya")
+               for k, w in enumerate(win))
+
+
+RESOURCE_NAMES = {"diagnosticreport"}
+
+
+def _banned(w):
+    if w in RESOURCE_NAMES:
+        return False
+    return w in BANNED or (w.startswith(("me", "di", "ter", "pe")) and any(st in w for st in BANNED_STEMS))
 
 
 def check(text):
     problems = []
     for n, line in enumerate(text.splitlines(), 1):
-        if line.strip().upper().startswith("## DAFTAR PUSTAKA"):
+        if line.strip().lstrip("#").strip().upper().startswith("DAFTAR PUSTAKA"):
             break
         if line.lstrip().startswith("!["):
             continue
@@ -35,9 +48,11 @@ def check(text):
             v = m.group(1)
             if v == "new" or not 1 <= int(v) <= 41:
                 problems.append(f"line {n}: citation: {m.group(0)}")
+        for m in ADJ.finditer(body):
+            problems.append(f"line {n}: citation: {m.group(0)} (use [a], [b])")
         words = [w.lower() for w in WORD.findall(body)]
         for i, w in enumerate(words):
-            if w in BANNED and w not in allowed and not _negated(words, i):
+            if _banned(w) and w not in allowed and not _negated(words, i):
                 problems.append(f"line {n}: banned: {w}")
     return problems
 
