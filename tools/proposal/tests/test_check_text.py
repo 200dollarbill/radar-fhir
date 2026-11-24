@@ -41,3 +41,11 @@ def test_heading_and_image_skipped():
 
 def test_inline_code_skipped():
     assert check("Kode `raw-capture` dipakai.") == []
+
+
+def test_allow_marker():
+    assert check("Variabel RME: tanda vital, diagnosis, prosedur. <!-- check:ok diagnosis -->") == []
+
+
+def test_allow_marker_only_named_word():
+    assert check("Diagnosis dan prediksi. <!-- check:ok diagnosis -->")

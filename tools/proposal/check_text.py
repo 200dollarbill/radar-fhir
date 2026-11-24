@@ -12,6 +12,7 @@ NEGATORS = {"bukan", "tidak", "tanpa", "not", "no", "never"}
 DASH = re.compile(r"(?<=[A-Za-z])-(?=[A-Za-z])|[–—]")
 CITE = re.compile(r"\[(\d+|new)\]")
 CODE = re.compile(r"`[^`]*`")
+ALLOW = re.compile(r"<!--\s*check:ok\s+([^>]*?)\s*-->")
 WORD = re.compile(r"[A-Za-z]+")
 
 
@@ -26,7 +27,8 @@ def check(text):
             break
         if line.lstrip().startswith("!["):
             continue
-        body = CODE.sub("", line)
+        allowed = {w.lower() for m in ALLOW.finditer(line) for w in m.group(1).split()}
+        body = CODE.sub("", ALLOW.sub("", line))
         for m in DASH.finditer(body):
             problems.append(f"line {n}: dash: {body[max(0, m.start() - 20):m.end() + 20]}")
         for m in CITE.finditer(body):
@@ -35,7 +37,7 @@ def check(text):
                 problems.append(f"line {n}: citation: {m.group(0)}")
         words = [w.lower() for w in WORD.findall(body)]
         for i, w in enumerate(words):
-            if w in BANNED and not _negated(words, i):
+            if w in BANNED and w not in allowed and not _negated(words, i):
                 problems.append(f"line {n}: banned: {w}")
     return problems
 
