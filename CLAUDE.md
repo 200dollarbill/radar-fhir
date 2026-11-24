@@ -20,10 +20,10 @@ for the doctor. The integrated display is the decision support; the doctor decid
 - FHIR and SATUSEHAT are the interoperability bridge, not the headline contribution.
 - The contribution is the system, not the RADAR device or an interpretation algorithm.
 
-**Next session: start with `docs/handover/2026-11-18-handover.md`.** Next task: proposal
+**Next session: start with `docs/handover/2026-11-24-handover.md`.** Next task: proposal
 development (Chapter III, progress, presentation), spec
-`docs/design/specs/2026-11-18-proposal-development-design.md`, awaiting the owner's
-approval. Literature deepening (`docs/design/specs/2026-11-03-literature-deepening-design.md`;
+`docs/design/specs/2026-11-18-proposal-development-design.md` (updated 2026-11-24 with
+hosting), awaiting the owner's approval. The hosting work is on PR #1, not merged yet. Literature deepening (`docs/design/specs/2026-11-03-literature-deepening-design.md`;
 results in `docs/papers/search/`) has produced L1 to L8. The website architecture is not designed yet and gets its own
 brainstorm after that.
 
@@ -93,6 +93,7 @@ README.md, Makefile             start here; `make` lists every command
 proposal_CLAUDE.md              thesis handoff
 docs/proposal_md/               proposal.md, citations, source and claim catalogue
 docs/proposal_guide/            how to write the proposal (style rules)
+docs/handover/                  session handovers; the newest one is the starting point
 docs/presentation/ets/          sidang outline, fishbone.md
 docs/notul/                     consultation notes
 docs/papers/                    papers by subject (PDF + md/); search/ = literature results

@@ -1,6 +1,27 @@
 # Proposal development: Chapter III, progress and presentation materials
 
-Date: 2026-11-18. Status: spec written for the owner's review; nothing drafted yet.
+Date: 2026-11-18, updated 2026-11-24. Status: spec written for the owner's review;
+nothing drafted yet.
+
+## Update 2026-11-24
+
+Since this spec was written the repo was tidied and the website hosted
+(`docs/design/specs/2026-11-19-tidy-up-and-cloudflare-hosting-design.md`). What that
+changes here:
+
+- Paths below use the new names (`docs/design/`, `website/`, `firmware/`). Older
+  documents still use the old ones; the table is in `README.md`, *Old names*.
+- 3.2 also describes the hosted path: a Cloudflare Worker serves the pages and forwards
+  API calls through a tunnel to the server on the laptop. Data stays on the laptop.
+- 3.5 also describes account creation on the laptop only (no self sign-up, account
+  management refused from the internet), the login rate limit and its limit (slow
+  guessing is not stopped).
+- 3.9 gains a row for hosting (deployed, live checks passed except the rate limit,
+  partial; real board not yet tested through the hosted address).
+- `docs/HOW-IT-WORKS.md` is a ready summary of the flow for 3.2 to 3.5.
+- Test counts on 2026-11-24: 236 server, 179 website, 23 hosting. Re-run on the day
+  of writing (rule unchanged).
+- Claude may commit its own work (`CLAUDE.md`), so the drafts are committed per step.
 
 ## Why
 
@@ -45,11 +66,12 @@ proposal and the materials to follow the development, including progress and met
 | Scope, framing, fix list | `proposal_CLAUDE.md`, `CLAUDE.md` |
 | Current text and reference numbers [1] to [41] | `docs/proposal_md/proposal.md` |
 | What each reference supports | `docs/proposal_md/daftar_sumber_dan_klaim.md`, `citations.md` |
-| Server, roles, validation | `docs/.superpowers/specs/2026-09-29-fhir-r4-server-walking-skeleton-design.md`, `fhir_server/README.md` |
-| Capture, chunks, Observation shape | `docs/.superpowers/specs/2026-11-04-capture-receiver-prototype-design.md` |
-| Display processing and its results | `docs/.superpowers/specs/2026-11-18-radar-display-processing-design.md`, `docs/eval/2026-11-18-radar-display-processing.md` |
-| Board identity, sessions, navigation, known weakness | `docs/.superpowers/specs/2026-11-18-board-sessions-and-navigation-design.md` |
-| How it runs, what is stored | `docs/RUN-GUIDE.md` |
+| Server, roles, validation | `docs/design/specs/2026-09-29-fhir-r4-server-walking-skeleton-design.md`, `fhir_server/README.md` |
+| Capture, chunks, Observation shape | `docs/design/specs/2026-11-04-capture-receiver-prototype-design.md` |
+| Display processing and its results | `docs/design/specs/2026-11-18-radar-display-processing-design.md`, `docs/eval/2026-11-18-radar-display-processing.md` |
+| Board identity, sessions, navigation, known weakness | `docs/design/specs/2026-11-18-board-sessions-and-navigation-design.md` |
+| How it runs, what is stored | `docs/RUN-GUIDE.md`, `docs/HOW-IT-WORKS.md` |
+| Hosting, accounts, live checks | `docs/design/specs/2026-11-19-tidy-up-and-cloudflare-hosting-design.md`, `docs/accounts/` |
 | Test counts | A fresh run of the three suites on the day of writing (not numbers copied from chat) |
 | FHIR and SATUSEHAT facts | `docs/reference/claude/` via `INDEX.md` (trace to raw, as `CLAUDE.md` requires) |
 
@@ -77,7 +99,7 @@ bullets, in the written text.
 |---|---|---|
 | 3.1 Alur Penelitian | Study steps: literature, requirements, design, incremental build, testing, evaluation, writing. [Gambar 3.1: alur penelitian] | `proposal_CLAUDE.md`, specs' dates |
 | 3.2 Arsitektur Sistem | Board, capture page, FHIR R4 server, SQLite store; Sessions and Review pages; the planned integrated doctor view fed by RME and ECG. Built versus planned stated plainly. [Gambar 3.2: arsitektur] | `RUN-GUIDE.md` picture, board-sessions spec |
-| 3.3 Perangkat dan Akuisisi Data | 24 GHz radar module on an AtomS3R, 12-bit ADC at 3.3 V, 100 samples per second, I and Q plus IMU, one text record per sample, timing that shows lost time as gaps, chunks of up to 10 s, upload retries that never duplicate. The I/Q pin order is an assumption | firmware README, capture spec |
+| 3.3 Perangkat dan Akuisisi Data | 24 GHz radar module on an AtomS3R, 12-bit ADC at 3.3 V, 100 samples per second, I and Q plus IMU, one text record per sample, timing that shows lost time as gaps, chunks of up to 10 s, upload retries that never duplicate. The I/Q pin order is an assumption | firmware README (`firmware/radar_json/README.md`), capture spec |
 | 3.4 Interoperabilitas dan Pemodelan Data | FHIR R4, SATUSEHAT-compatible locally with no connection to the national platform; the resources used (Patient, Practitioner, Organization, Location, Encounter, Device, Observation); raw signal as Observation with sampled data; validation answering with OperationOutcome; local code system because no standard code for radar I/Q was found (a limitation). Plan: ECG mapping following [20], RME mapping, and the syntactic versus semantic caution of [23] | walking-skeleton and capture specs, `docs/reference/claude/` |
 | 3.5 Manajemen Sesi, Peran, dan Keamanan | Roles (admin, doctor, patient, device); board identity from the chip ID and a key it makes itself; a session is a visit plus one assigned board; uploads allowed only into an open session; test patients only. The known weakness and the planned challenge and response | board-sessions spec |
 | 3.6 Pemrosesan Tampilan Sinyal | Display processing only. Six candidate methods, synthetic ground truth with 12-bit quantization, selection rule fixed before running, independent re-derivation of scores. Result: hybrid, median 0.92, with the 0.5 to 10 Hz band. Weak signal is a hardware limit (0.42; 0.88 with 16 averaged reads, a what-if). Table: method against median score | display-processing spec and eval report |
