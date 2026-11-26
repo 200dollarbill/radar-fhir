@@ -185,25 +185,94 @@ Firmware mengambil sampel kanal I dan Q sebanyak 100 kali per detik dari pewaktu
 
 ![Gambar 3.6 Protokol pengambilan data kelompok dan penerimaan data oleh sistem](figures/protokol.png)
 
-### 3.6 Pemodelan Data FHIR
+### 3.6 Perancangan Pemodelan Data FHIR
 
-Seluruh data disimpan dalam FHIR R4 yang kompatibel dengan SATUSEHAT, yaitu mengikuti profil, sistem identifier, dan terminologi SATUSEHAT secara lokal tanpa terhubung ke platform nasional. Resource yang dipakai adalah Patient, Practitioner, Organization, Location, Encounter, Device, dan Observation. Data yang tidak valid ditolak dengan OperationOutcome bergaya SATUSEHAT. Sinyal mentah disimpan sebagai satu Observation per potongan dengan delapan komponen SampledData, yaitu kanal I, kanal Q, tiga sumbu akselerometer, dan tiga sumbu giroskop. Karena kode standar untuk sinyal I/Q radar tidak ditemukan, sistem memakai code system lokal, dan hal ini dicatat sebagai keterbatasan. Rekaman EKG direncanakan mengikuti pemetaan panduan implementasi EKG yang patuh SATUSEHAT ke Observation, DiagnosticReport, dan Device [20]. Pemetaan RME sintetis mengikuti variabel dalam Keputusan Menteri Kesehatan Nomor HK.01.07/Menkes/1423/2022 [21]. Profil yang valid secara sintaksis belum tentu benar secara makna [23], sehingga setiap pemetaan diperiksa juga dengan membandingkan nilai yang tersimpan dengan data asal.
+Seluruh data disimpan dalam FHIR R4 yang kompatibel dengan SATUSEHAT, yaitu mengikuti profil, sistem identifier, dan terminologi SATUSEHAT secara lokal tanpa terhubung ke platform nasional. Resource yang dipakai adalah Patient, Practitioner, Organization, Location, Encounter, Device, dan Observation. Data yang tidak valid ditolak dengan OperationOutcome bergaya SATUSEHAT, sehingga tidak ada data setengah jadi yang tersimpan. Tabel 3.1 merangkum pemetaan setiap jenis data ke resource dan elemennya.
 
-### 3.7 Sesi, Peran, dan Keamanan
+Tabel 3.1 Pemetaan data ke resource FHIR
 
-Sistem mengenal empat peran. Admin mendaftarkan papan dan pasien uji serta dapat membuka dan menutup sesi mana pun. Dokter hanya dapat membuka sesi bagi pasien yang ia tangani. Papan hanya dapat menulis hasil pengukuran ke sesinya sendiri yang sedang terbuka. Pasien hanya dapat membaca rekamannya sendiri. Identitas papan berasal dari nomor unik chip ESP32 dan kunci acak yang dibuat papan saat pertama kali menyala, dan server hanya menyimpan hash kunci tersebut. Akun dibuat hanya dari laptop, tidak ada pendaftaran mandiri, dan pengelolaan akun ditolak bila diakses dari internet. Keterbatasan yang diketahui dicatat terbuka. Papan saat ini mengirim kuncinya kepada siapa pun yang memintanya melalui port, dengan perbaikan yang direncanakan berupa mekanisme tantangan dan jawaban. Pembatasan laju login menghentikan percobaan cepat, tetapi belum menghentikan tebakan yang lambat.
+| Data | Resource | Elemen utama | Sistem kode dan kode |
+|---|---|---|---|
+| Identitas pasien uji | Patient | identifier, name, gender, birthDate | NIK dan nomor IHS dengan sistem identifier SATUSEHAT |
+| Dokter | Practitioner | identifier, name | NIK dengan sistem identifier SATUSEHAT |
+| Fasilitas dan ruang | Organization, Location | identifier, name, managingOrganization | sistem identifier organisasi SATUSEHAT |
+| Sesi pengukuran | Encounter | status, class, subject, participant, location, period | class AMB (ambulatory) dari HL7 v3 ActCode |
+| Papan radar | Device | identifier, serialNumber, deviceName | nomor chip papan dengan code system lokal |
+| Sinyal mentah satu potongan | Observation | code, subject, encounter, device, effectiveDateTime, component | code system lokal, kode raw capture; satuan UCUM |
+| Delapan kanal sinyal | Observation.component | valueSampledData (origin, period, dimensions, data) | kode lokal per kanal: I, Q, tiga sumbu akselerometer, tiga sumbu giroskop |
+| Rekaman EKG 12 sadapan (direncanakan) | Observation, DiagnosticReport, Device | mengikuti panduan implementasi EKG [20] | LOINC dan SNOMED CT sesuai panduan [20] |
+| Data RME sintetis (direncanakan) | Condition, MedicationStatement, Observation | mengikuti variabel RME [21] | ICD 10, LOINC, dan SNOMED CT |
 
-### 3.8 Rancangan Tampilan Terpadu
+Sinyal mentah disimpan sebagai satu Observation per potongan. Setiap kanal menjadi satu komponen dengan SampledData, yaitu deret angka yang disertai titik nol (origin), selang antarsampel (period), dan satuannya. Pada laju 100 sampel per detik, selang antarsampel adalah 10 ms. Listing 3.1 memperlihatkan bentuk resource tersebut dengan isi data yang dipersingkat. Catatan mutu potongan, yaitu jumlah sampel yang hilang dan baris yang ditolak, disimpan pada elemen note agar celah data tetap tercatat. Karena kode standar untuk sinyal I/Q radar tidak ditemukan, sistem memakai code system lokal, dan hal ini dicatat sebagai keterbatasan.
+
+```json
+{
+  "resourceType": "Observation",
+  "status": "final",
+  "code": {"coding": [{"system": "urn:prata:radar-signal",
+                       "code": "raw-capture",
+                       "display": "Raw radar I/Q capture"}]},
+  "subject": {"reference": "Patient/P10000000001"},
+  "encounter": {"reference": "Encounter/..."},
+  "device": {"reference": "Device/..."},
+  "effectiveDateTime": "2026-11-18T07:30:10+00:00",
+  "component": [{
+    "code": {"coding": [{"system": "urn:prata:radar-signal",
+                         "code": "i-voltage"}]},
+    "valueSampledData": {
+      "origin": {"value": 0, "unit": "V",
+                 "system": "http://unitsofmeasure.org", "code": "V"},
+      "period": 10, "dimensions": 1,
+      "data": "1.531 1.532 1.530 ..."}
+  }]
+}
+```
+
+Listing 3.1 Contoh Observation sinyal mentah yang dipersingkat
+
+Rekaman EKG direncanakan mengikuti pemetaan panduan implementasi EKG yang patuh SATUSEHAT ke Observation, DiagnosticReport, dan Device [20]. Pemetaan RME sintetis mengikuti variabel dalam Keputusan Menteri Kesehatan Nomor HK.01.07/Menkes/1423/2022 [21]. Resource untuk RME pada Tabel 3.1 masih usulan dan akan ditetapkan setelah sumber RME sintetis dipilih. Profil yang valid secara sintaksis belum tentu benar secara makna [23], sehingga setiap pemetaan diperiksa juga dengan membandingkan nilai yang tersimpan dengan data asal.
+
+### 3.7 Perancangan Antarmuka
+
+Antarmuka dibangun sebagai halaman web yang memakai satu bilah navigasi bersama. Halaman Sessions dipakai admin dan dokter untuk masuk, mendaftarkan papan, membuat pasien uji, serta membuka dan menutup sesi. Halaman Capture membaca papan melalui Web Serial, menampilkan pratinjau, dan merekam ke sesi papan yang sedang terbuka. Halaman Review membuka berkas rekaman yang tersimpan, berupa CSV atau Bundle FHIR, untuk ditinjau ulang dan untuk membandingkan metode tampilan. Ketiga halaman ini sudah dibangun.
 
 Tampilan terpadu bagi dokter direncanakan memuat konteks RME pasien, gelombang radar, dan EKG 12 sadapan pada satu sumbu waktu. Tampilan gelombang radar memakai metode tampilan yang dipilih dengan aturan tetap pada data sintetis yang nilai sebenarnya diketahui. Enam metode dibandingkan, aturan pemilihan ditulis sebelum metode dijalankan, dan metode hybrid terpilih dengan median skor 0,92. Pemilihan ini hanya memengaruhi apa yang dilihat dokter di layar dan tidak diklaim sebagai pengukuran maupun kontribusi penelitian, karena pengolahan sinyal adalah bagian cabang lain. Tampilan tidak memberikan diagnosis, prediksi, atau skor risiko. Penanda berbasis aturan hanya akan ditambahkan bila waktu memungkinkan.
 
-### 3.9 Metode Pengujian dan Analisis
+### 3.8 Perancangan Keamanan
+
+Keamanan dirancang berlapis. Lapisan pertama adalah akun. Akun dibuat hanya dari laptop peneliti, tidak ada pendaftaran mandiri, dan pengelolaan akun ditolak bila diakses dari internet, baik oleh Worker maupun oleh server. Kata sandi disimpan sebagai hash, dan pengguna yang masuk menerima token bertanda tangan yang berlaku satu jam. Lapisan kedua adalah peran. Admin mendaftarkan papan dan pasien uji serta dapat membuka dan menutup sesi mana pun. Dokter hanya dapat membuka sesi bagi pasien yang ia tangani. Papan hanya dapat menulis hasil pengukuran ke sesinya sendiri yang sedang terbuka. Pasien hanya dapat membaca rekamannya sendiri.
+
+Lapisan ketiga adalah identitas papan. Identitas papan berasal dari nomor unik chip ESP32 dan kunci acak yang dibuat papan saat pertama kali menyala, dan server hanya menyimpan hash kunci tersebut. Lapisan keempat adalah jalur publik. Cloudflare Worker hanya meneruskan permintaan ke laptop melalui tunnel, menandai permintaan yang datang dari internet, dan tidak menyimpan data. Keterbatasan yang diketahui dicatat terbuka. Papan saat ini mengirim kuncinya kepada siapa pun yang memintanya melalui port, dengan perbaikan yang direncanakan berupa mekanisme tantangan dan jawaban. Pembatasan laju login menghentikan percobaan cepat, tetapi belum menghentikan tebakan yang lambat.
+
+### 3.9 Perancangan Pengujian
 
 Pengujian dilakukan berjenjang, dari yang murah dan terkendali sampai yang paling realistis, dan jenjang berikutnya baru dilalui bila jenjang sebelumnya lolos. Jenjang pertama adalah uji unit dan integrasi otomatis untuk server, halaman web, lapisan hosting, dan logika firmware. Jenjang kedua memakai papan simulasi yang menghasilkan sinyal dengan nilai acuan, untuk memastikan setiap sampel yang keluar dari papan tiba di basis data tanpa berubah. Jenjang ketiga adalah uji bangku dengan papan nyata. Jenjang keempat mengulang alur melalui alamat hosting, dan jenjang kelima sengaja menimbulkan gangguan, misalnya menghentikan server di tengah perekaman. Setelah kelima jenjang lolos, sistem diuji dengan data subjek dari cabang A sampai C.
 
-![Gambar 3.4 Jenjang pengujian perangkat keras dan perangkat lunak](figures/pengujian.png)
+![Gambar 3.7 Jenjang pengujian perangkat keras dan perangkat lunak](figures/pengujian.png)
 
-Setiap jenjang memiliki kriteria lolos yang terukur. Untuk keutuhan data, jumlah sampel yang tersimpan harus sama dengan jumlah yang dikirim, tanpa duplikasi, dan celah waktu harus tercatat. Untuk interoperabilitas, setiap resource harus lolos validasi FHIR R4, dan kelengkapan pemetaan EKG serta RME dihitung sebagai persentase variabel wajib yang berhasil dipetakan, dengan target [insert data: target kelengkapan pemetaan]. Untuk penyelarasan waktu, rekaman radar dan EKG yang diambil bersamaan harus sejajar dalam toleransi yang ditetapkan sebelum pengujian [insert data: toleransi penyelarasan waktu]. Untuk hosting, waktu proses Worker dicatat per permintaan. Hasil dianalisis secara deskriptif dengan membandingkan setiap nilai terhadap kriterianya.
+Setiap kelompok pengujian memiliki metrik dan kriteria lolos yang ditetapkan sebelum pengujian, seperti pada Tabel 3.2.
+
+Tabel 3.2 Rancangan pengujian
+
+| Kelompok | Aspek yang diuji | Metrik | Kriteria lolos |
+|---|---|---|---|
+| Fungsional | Fungsi tiap peran, pembukaan sesi, perekaman, peninjauan | Hasil uji otomatis dan skenario manual | Seluruh uji lolos; keluaran sesuai skenario |
+| Keutuhan data | Alur dari papan sampai basis data | Kelengkapan sampel (3.1), jumlah duplikat (3.2), celah tercatat | Kelengkapan 100% untuk sampel yang terkirim; duplikat nol; setiap celah tercatat |
+| Interoperabilitas FHIR | Resource yang tersimpan dan hasil pemetaan EKG serta RME | Validasi FHIR R4, kelengkapan pemetaan (3.3) | Seluruh resource lolos validasi; kelengkapan sedikitnya [insert data: target kelengkapan pemetaan] |
+| Penyelarasan waktu | Rekaman radar dan EKG yang diambil bersamaan | Galat penyelarasan (3.4) | Galat tidak lebih dari [insert data: toleransi penyelarasan waktu] |
+| Keamanan dan peran | Akses tiap peran, kunci papan, pengelolaan akun dari internet | Kode status dan isi jawaban server | Akses sah diterima, akses tidak sah ditolak |
+| Hosting dan gangguan | Alur melalui alamat publik, server mati di tengah perekaman | Waktu proses Worker, waktu pemulihan unggahan, duplikat | Seluruh potongan terunggah setelah server kembali tanpa duplikat |
+
+Metrik keutuhan dan interoperabilitas dihitung dengan rumus berikut.
+
+```rumus
+K_sampel = (N_tersimpan / N_terkirim) × 100%   (3.1)
+D = N_tersimpan dikurangi N_unik   (3.2)
+K_pemetaan = (V_terpetakan / V_wajib) × 100%   (3.3)
+e_i = | t_radar,i dikurangi t_EKG,i |   (3.4)
+```
+
+Pada Persamaan 3.1, N_tersimpan adalah jumlah sampel yang tersimpan di basis data dan N_terkirim adalah jumlah sampel yang dikirim papan menurut nomor urut slot waktunya. Pada Persamaan 3.2, N_unik adalah jumlah sampel dengan nomor urut yang berbeda, sehingga D bernilai nol bila tidak ada sampel yang tersimpan dua kali. Pada Persamaan 3.3, V_wajib adalah jumlah variabel wajib pada sumber data dan V_terpetakan adalah jumlah variabel wajib yang berhasil dipetakan ke elemen FHIR. Pada Persamaan 3.4, t_radar,i dan t_EKG,i adalah waktu peristiwa ke i yang dipasangkan pada rekaman radar dan EKG, dan galat penyelarasan dilaporkan sebagai nilai terbesar dan median dari seluruh e_i. Selain validasi oleh server sendiri, contoh resource juga akan diperiksa dengan HL7 FHIR Validator terhadap FHIR R4 [cite: HL7 FHIR Validator]. Hasil dianalisis secara deskriptif dengan membandingkan setiap nilai terhadap kriterianya.
 
 ### 3.10 Etika Penelitian dan Perlindungan Data
 
@@ -211,7 +280,9 @@ Pengambilan data subjek dilakukan oleh cabang A sampai C dan baru dimulai setela
 
 ### 3.11 Progres Penelitian
 
-Per 24 November 2026, purwarupa sistem sudah berjalan dari papan radar sampai basis data dan dapat diakses melalui alamat publik. Pengujian otomatis yang dijalankan pada tanggal tersebut lolos seluruhnya, yaitu 236 uji server, 179 uji halaman web, dan 23 uji lapisan hosting. Pada uji bangku, kedua kanal papan diam berada di sekitar 1,53 V dengan sebaran sekitar 1 mV, dan sebaran naik menjadi 90 sampai 170 mV ketika ada gerakan di depan radar. Rekaman ini menunjukkan bahwa radar merespons gerakan, tetapi belum ditinjau sebagai sinyal fisiologis. Pada uji gangguan, seluruh potongan yang tertahan di peramban terunggah 16 sampai 17 detik setelah server kembali menyala tanpa duplikasi, dan waktu proses Worker tidak lebih dari 3 ms per permintaan. Nilai detak jantung yang dikirim firmware masih berupa nilai pengganti, bukan hasil pengukuran radar.
+Per 26 November 2026, purwarupa sistem sudah berjalan dari papan radar sampai basis data dan dapat diakses melalui alamat publik. Pengujian otomatis yang dijalankan pada tanggal tersebut lolos seluruhnya, yaitu 236 uji server, 179 uji halaman web, dan 23 uji lapisan hosting. Status setiap komponen dirangkum pada Tabel 3.3. Pada uji bangku, kedua kanal papan diam berada di sekitar 1,53 V dengan sebaran sekitar 1 mV, dan sebaran naik menjadi 90 sampai 170 mV ketika ada gerakan di depan radar. Rekaman ini menunjukkan bahwa radar merespons gerakan, tetapi belum ditinjau sebagai sinyal fisiologis. Pada uji gangguan, seluruh potongan yang tertahan di peramban terunggah 16 sampai 17 detik setelah server kembali menyala tanpa duplikasi, dan waktu proses Worker tidak lebih dari 3 ms per permintaan. Nilai detak jantung yang dikirim firmware masih berupa nilai pengganti, bukan hasil pengukuran radar.
+
+Tabel 3.3 Status komponen sistem
 
 | Komponen | Status | Catatan |
 |---|---|---|
@@ -226,9 +297,18 @@ Per 24 November 2026, purwarupa sistem sudah berjalan dari papan radar sampai ba
 
 ### 3.12 Rencana Kerja
 
-Pekerjaan berikutnya disusun berurutan karena setiap langkah bergantung pada langkah sebelumnya. Langkah pertama adalah menyepakati format keluaran dengan cabang A sampai C, termasuk penanda waktu dan nilai acuan. Langkah kedua adalah membangun penerimaan rekaman EKG dan sinyal radar dari cabang tersebut. Langkah ketiga adalah memilih sumber RME sintetis dan membangun impornya. Langkah keempat adalah membangun tampilan terpadu bagi dokter. Langkah kelima adalah evaluasi dengan kriteria pada subbab 3.9, lalu penulisan laporan. Jadwal setiap langkah akan disesuaikan dengan jadwal pengambilan data kelompok [insert data: jadwal].
+Pekerjaan berikutnya disusun berurutan karena setiap langkah bergantung pada langkah sebelumnya. Langkah pertama adalah menyepakati format keluaran dengan cabang A sampai C, termasuk penanda waktu dan nilai acuan. Langkah kedua adalah membangun penerimaan rekaman EKG dan sinyal radar dari cabang tersebut. Langkah ketiga adalah memilih sumber RME sintetis dan membangun impornya. Langkah keempat adalah membangun tampilan terpadu bagi dokter. Langkah kelima adalah evaluasi dengan kriteria pada subbab 3.9, lalu penulisan laporan. Jadwal setiap langkah akan disesuaikan dengan jadwal pengambilan data kelompok, seperti pada Tabel 3.4.
 
----
+Tabel 3.4 Rencana kerja
+
+| Langkah | Luaran | Waktu |
+|---|---|---|
+| Kesepakatan format data dengan cabang A sampai C | Format berkas, penanda waktu, dan nilai acuan yang disepakati | [insert data: jadwal] |
+| Penerimaan rekaman radar dan EKG | Impor berkas, pemeriksaan kelengkapan, dan pemetaan EKG ke FHIR | [insert data: jadwal] |
+| Impor RME sintetis | Sumber RME terpilih dan pemetaannya ke FHIR | [insert data: jadwal] |
+| Tampilan terpadu bagi dokter | Halaman yang menampilkan RME, radar, dan EKG pada satu sumbu waktu | [insert data: jadwal] |
+| Evaluasi | Hasil pengujian terhadap kriteria Tabel 3.2 | [insert data: jadwal] |
+| Penulisan laporan | Buku tugas akhir | [insert data: jadwal] |
 
 ## DAFTAR PUSTAKA
 [1] World Health Organization, "Cardiovascular diseases (CVDs)." Accessed: Oct. 23, 2026. [Online]. Available: https://www.who.int/news-room/fact-sheets/detail/cardiovascular-diseases-(cvds)
