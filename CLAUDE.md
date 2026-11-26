@@ -20,10 +20,11 @@ for the doctor. The integrated display is the decision support; the doctor decid
 - FHIR and SATUSEHAT are the interoperability bridge, not the headline contribution.
 - The contribution is the system, not the RADAR device or an interpretation algorithm.
 
-**Next session: start with `docs/handover/2026-11-24-handover.md`.** Next task: proposal
-development (Chapter III, progress, presentation), spec
-`docs/design/specs/2026-11-18-proposal-development-design.md` (updated 2026-11-24 with
-hosting), awaiting the owner's approval. The hosting work is on PR #1, not merged yet. Literature deepening (`docs/design/specs/2026-11-03-literature-deepening-design.md`;
+**Next session: start with `docs/handover/2026-11-26-handover.md`.** Bab III is written
+(`proposal.md`) and the Word file is built from the owner's ITS template
+(`proposal_revised/proposal_prata_revised_v2.docx`, rebuild with
+`tools/proposal/build_docx.py`). Next: owner checks the docx in Word, then the presentation
+outline v3 (spec `docs/design/specs/2026-11-18-proposal-development-design.md`, P9). The hosting work is on PR #1, not merged yet. Literature deepening (`docs/design/specs/2026-11-03-literature-deepening-design.md`;
 results in `docs/papers/search/`) has produced L1 to L8. The website architecture is not designed yet and gets its own
 brainstorm after that.
 
