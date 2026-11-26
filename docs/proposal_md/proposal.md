@@ -127,15 +127,20 @@ Karena itu penelitian ini difokuskan pada rekayasa sistem perangkat lunak penduk
 
 ---
 
-## BAB III METODOLOGI
+## BAB III METODOLOGI DAN PERANCANGAN SISTEM
 
-### 3.1 Alur Penelitian
+Bab ini menjelaskan cara penelitian dijalankan dan rancangan sistem yang dibangun. Pembahasannya mencakup pendekatan dan alur penelitian, sumber data, perangkat yang dipakai, arsitektur sistem beserta kebutuhan dan alur kerjanya, rancangan penerimaan data, pemodelan data FHIR, antarmuka, keamanan, rancangan pengujian, etika penelitian, progres, dan rencana kerja. Bab ini berisi rancangan dan kriteria. Hasil pengujian lengkap akan dilaporkan pada buku tugas akhir.
 
-Penelitian ini adalah penelitian rekayasa sistem dengan alur yang berulang. Alur dimulai dari pertanyaan penelitian, dilanjutkan studi literatur yang disusun sebagai rantai argumen delapan mata rantai (L1 sampai L8), lalu penggalian kebutuhan dari pembimbing, dokter mitra, dan cabang penelitian lain yang keluarannya akan diterima sistem. Setiap bagian sistem diberi spesifikasi rancangan tertulis sebelum dibangun. Spesifikasi memuat tujuan, hal yang berada di luar lingkup, keputusan rancangan beserta alasannya, dan syarat yang harus terpenuhi agar bagian itu dianggap selesai. Bagian tersebut kemudian dibangun dalam langkah kecil dengan pengujian yang ditulis lebih dulu daripada kode yang diujinya. Bila uji gagal, kode diperbaiki sebelum melangkah ke bagian berikutnya. Temuan yang tidak terduga saat pengujian dikembalikan ke tahap literatur dan kebutuhan.
+### 3.1 Pendekatan dan Alur Penelitian
+
+Penelitian ini memakai pendekatan perancangan dan implementasi sistem. Fokusnya bukan uji klinis, melainkan pembangunan purwarupa sistem pendukung keputusan klinis yang menerima hasil pengukuran RADAR, rekaman EKG, dan data RME, lalu menyimpannya dalam satu format bersama. Keluaran utama penelitian berupa rancangan sistem, perangkat lunak yang berjalan, dan hasil pengujian teknis.
+
+Alur penelitian bersifat berulang. Alur dimulai dari pertanyaan penelitian, dilanjutkan studi literatur yang disusun sebagai rantai argumen delapan mata rantai (L1 sampai L8), lalu penggalian kebutuhan dari pembimbing, dokter mitra, dan cabang penelitian lain yang keluarannya akan diterima sistem. Setiap bagian sistem diberi spesifikasi rancangan tertulis sebelum dibangun. Spesifikasi memuat tujuan, hal yang berada di luar lingkup, keputusan rancangan beserta alasannya, dan syarat yang harus terpenuhi agar bagian itu dianggap selesai. Bagian tersebut kemudian dibangun dalam langkah kecil dengan pengujian yang ditulis lebih dulu daripada kode yang diujinya. Bila uji gagal, kode diperbaiki sebelum melangkah ke bagian berikutnya. Temuan yang tidak terduga saat pengujian dikembalikan ke tahap literatur dan kebutuhan.
 
 ![Gambar 3.1 Alur penelitian](figures/alur.png)
 
 ### 3.2 Sumber Data dan Subjek
+
 
 Penelitian ini tidak merekam subjek baru. Data pengukuran berasal dari cabang A sampai C dalam pohon penelitian yang sama, yang mengumpulkan data subjek di RSUD Dr. Soetomo di bawah satu proposal etik bersama. Cabang A menyediakan sinyal radar pulsa karotis beserta rekaman EKG sebagai acuan temporal, cabang B menyediakan sinyal radar karotis kiri dan kanan, dan cabang C menyediakan sinyal radar vena jugularis beserta nilai acuan dari ultrasound mode A. Data direncanakan diserahkan dalam keadaan telah dianonimkan, dan ketentuan ini perlu dicantumkan dalam proposal etik karena saat ini proposal etik baru menyebut pemakaian ulang data cabang A sampai C. Jumlah subjek, kriteria inklusi dan eksklusi, serta jadwal pengambilan data mengikuti protokol etik kelompok dan akan ditetapkan di sana [insert data: jumlah subjek dan kriteria dari protokol etik]. Pada konsultasi 15 Oktober 2026, jumlah sekitar 100 subjek dengan waktu lebih dari satu bulan telah dibahas bersama dokter mitra, tetapi angka ini belum final. Data RME berasal dari sumber sintetis atau data uji [insert data: sumber RME sintetis], karena RME nyata memerlukan persetujuan etik tersendiri.
 
@@ -145,15 +150,40 @@ Perangkat keras yang dipakai adalah modul radar CW 24 GHz yang terhubung ke papa
 
 ### 3.4 Arsitektur Sistem
 
-Sistem dirancang berlapis agar setiap lapisan dapat dibangun dan diuji secara terpisah. Lapisan akuisisi adalah papan radar yang mengirim satu rekaman per sampel melalui USB. Lapisan penangkapan adalah halaman Capture di peramban yang mengelompokkan sampel menjadi potongan berdurasi paling lama 10 detik lalu mengunggahnya ke server. Lapisan data adalah server FHIR R4 yang menyimpan pasien, dokter, kunjungan, perangkat, dan hasil pengukuran sebagai resource standar. Lapisan akses mengatur hak setiap peran. Lapisan hosting adalah Cloudflare Worker yang melayani halaman secara publik dan meneruskan permintaan API ke server di laptop, sehingga data tidak pernah disimpan di luar laptop. Penerimaan data cabang A sampai C, impor RME sintetis, dan tampilan terpadu bagi dokter adalah lapisan berikutnya yang masih direncanakan.
+#### 3.4.1 Gambaran Umum
+
+Sistem dirancang berlapis agar setiap lapisan dapat dibangun dan diuji secara terpisah. Lapisan akuisisi adalah papan radar yang mengirim satu rekaman per sampel melalui USB. Lapisan penangkapan adalah halaman Capture di peramban yang mengelompokkan sampel menjadi potongan berdurasi paling lama 10 detik lalu mengunggahnya ke server. Lapisan data adalah server FHIR R4 yang menyimpan pasien, dokter, kunjungan, perangkat, dan hasil pengukuran sebagai resource standar. Lapisan akses mengatur hak setiap peran. Lapisan hosting adalah Cloudflare Worker yang melayani halaman secara publik dan meneruskan permintaan API ke server di laptop, sehingga data tidak pernah disimpan di luar laptop. Halaman web tidak pernah membaca basis data secara langsung, karena seluruh permintaan melewati server dan aturan aksesnya. Penerimaan data cabang A sampai C, impor RME sintetis, dan tampilan terpadu bagi dokter adalah lapisan berikutnya yang masih direncanakan, dan pada Gambar 3.2 digambar dengan garis putus.
 
 ![Gambar 3.2 Arsitektur sistem](figures/arsitektur.png)
 
-### 3.5 Protokol Akuisisi dan Penerimaan Data
+#### 3.4.2 Use Case Diagram
+
+Use case diagram pada Gambar 3.3 menunjukkan siapa yang berinteraksi dengan sistem dan untuk keperluan apa. Aktornya ada empat. Admin mendaftarkan papan radar, membuat pasien uji, membuka dan menutup sesi, serta dapat meninjau seluruh rekaman. Dokter membuka sesi bagi pasiennya, menjalankan pratinjau dan perekaman di halaman Capture, dan meninjau rekaman di halaman Review. Papan radar adalah aktor perangkat yang hanya mengirim potongan sinyal ke sesinya yang sedang terbuka. Pasien membaca rekamannya sendiri. Dua fungsi digambar dengan garis putus karena belum dibangun. Tampilan terpadu bagi dokter masih direncanakan, sedangkan penyimpanan dan pembagian data oleh pasien belum ditetapkan sebagai bagian inti penelitian. Pembuatan akun berada di luar sistem web karena akun hanya dibuat dari laptop peneliti.
+
+![Gambar 3.3 Use case diagram sistem](figures/usecase.png)
+
+#### 3.4.3 Kebutuhan Sistem
+
+Kebutuhan fungsional diturunkan dari peran pengguna. Untuk admin, sistem harus dapat mendaftarkan papan beserta identitasnya, membuat pasien uji dengan data sintetis, membuka dan menutup sesi bagi dokter mana pun, serta membaca seluruh data. Untuk dokter, sistem harus dapat membuka sesi hanya bagi pasien yang sudah ia tangani, menutup sesinya sendiri, merekam melalui halaman Capture, dan membaca kunjungan serta hasil pengukuran miliknya. Untuk pasien, sistem hanya membuka rekaman miliknya sendiri. Untuk papan radar, sistem hanya menerima hasil pengukuran ke sesi papan itu yang sedang terbuka. Pada tahap berikutnya sistem juga harus dapat menerima rekaman radar dan EKG dari cabang A sampai C, mengimpor RME sintetis, dan menampilkan ketiganya bagi dokter pada satu sumbu waktu.
+
+Kebutuhan nonfungsional mencakup lima hal. Interoperabilitas berarti seluruh data disimpan sebagai resource FHIR R4 yang mengikuti profil, sistem identifier, dan terminologi SATUSEHAT. Keutuhan data berarti tidak ada sampel yang hilang tanpa tercatat dan tidak ada potongan yang tersimpan dua kali. Keamanan berarti setiap permintaan dikenali pengirimnya dan dibatasi oleh perannya. Ketersediaan berarti halaman dapat diakses melalui alamat publik selama laptop peneliti menjalankan server dan tunnel. Ketertelusuran berarti setiap bagian memiliki spesifikasi dan pengujian otomatis yang dapat dijalankan ulang.
+
+#### 3.4.4 Alur Kerja Sistem
+
+Alur kerja utama digambarkan dengan sequence diagram. Gambar 3.4 menunjukkan alur yang sudah dibangun, yaitu pembukaan sesi dan perekaman. Dokter atau admin membuka sesi untuk satu pasien dan satu papan, dan server mencatatnya sebagai Encounter. Halaman Capture menanyakan identitas papan, lalu meminta sesi milik papan tersebut ke server dengan kunci papan sebagai kredensial. Setelah pratinjau, perekaman dimulai. Setiap potongan 10 detik disimpan lebih dulu di peramban, dikirim ke server sebagai Observation, diperiksa peran, sesi, dan validitasnya, lalu disimpan. Salinan di peramban baru dihapus setelah server menjawab bahwa data tersimpan. Sesi ditutup dari halaman Sessions dan Encounter diakhiri.
+
+![Gambar 3.4 Sequence diagram pembukaan sesi dan perekaman](figures/seq_sesi.png)
+
+Gambar 3.5 menunjukkan alur tinjauan dokter yang masih direncanakan. Dokter memilih pasien dan kunjungan, tampilan terpadu mengambil data RME sintetis, Observation radar, dan rekaman EKG dari server, menyelaraskannya pada satu sumbu waktu, lalu menampilkannya dalam satu layar. Keputusan tetap diambil oleh dokter.
+
+![Gambar 3.5 Sequence diagram tinjauan dokter (direncanakan)](figures/seq_dokter.png)
+
+### 3.5 Perancangan Akuisisi dan Penerimaan Data
+
 
 Firmware mengambil sampel kanal I dan Q sebanyak 100 kali per detik dari pewaktu perangkat keras pada tugas tersendiri. Setiap sampel membawa nomor urut slot waktu, sehingga waktu yang hilang tampak sebagai celah dan tidak tersembunyi. Halaman Capture menyimpan setiap potongan di penyimpanan lokal peramban lebih dulu, lalu mengirimnya ke server, dan baru menghapusnya setelah server mengonfirmasi bahwa data tersimpan. Pengiriman ulang memakai pembuatan bersyarat, sehingga satu potongan tidak pernah tersimpan dua kali. Untuk data cabang A sampai C, sistem akan menerima berkas rekaman yang telah dianonimkan, memeriksa kelengkapan sampel dan penanda waktunya, lalu menyelaraskan rekaman radar dengan EKG pada satu sumbu waktu untuk rekaman yang memiliki EKG, yaitu rekaman cabang A. Apakah EKG yang direkam cabang A berupa 12 sadapan masih perlu dikonfirmasi [insert data: jenis rekaman EKG cabang A]. Rekaman yang tidak lengkap atau tidak dapat diselaraskan dikembalikan ke tim cabang terkait dan tidak ditampilkan kepada dokter.
 
-![Gambar 3.3 Protokol pengambilan data kelompok dan penerimaan data oleh sistem](figures/protokol.png)
+![Gambar 3.6 Protokol pengambilan data kelompok dan penerimaan data oleh sistem](figures/protokol.png)
 
 ### 3.6 Pemodelan Data FHIR
 
