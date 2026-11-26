@@ -35,7 +35,13 @@ def _banned(w):
 
 def check(text):
     problems = []
+    in_fence = False
     for n, line in enumerate(text.splitlines(), 1):
+        if line.strip().startswith("```"):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
         if line.strip().lstrip("#").strip().upper().startswith("DAFTAR PUSTAKA"):
             break
         if line.lstrip().startswith("!["):

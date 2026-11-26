@@ -78,3 +78,11 @@ def test_plain_bibliography_heading_stops():
 
 def test_fhir_resource_name_allowed():
     assert check("Resource Observation dan DiagnosticReport dipakai.") == []
+
+
+def test_fenced_block_skipped():
+    assert check("Teks.\n```json\n{\"date\": \"2026-11-18\"}\n```\nTeks lagi.") == []
+
+
+def test_after_fence_still_checked():
+    assert any("dash" in p for p in check("```json\n{}\n```\nRadar non-kontak."))
