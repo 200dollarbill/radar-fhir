@@ -96,8 +96,10 @@ and footers.
   reference list [1] to [41] from `proposal.md`.
 - Headings use the template's Heading1 and Heading2. Figures embedded with captions,
   tables as Word tables with captions above, formulas as numbered text lines.
-- DAFTAR ISI, DAFTAR TABEL and DAFTAR GAMBAR rebuilt as text lists (no page numbers
-  computed; the owner updates them in Word). The owner's comments are not carried over.
+- DAFTAR ISI and DAFTAR TABEL stay the template's Word TOC fields; DAFTAR GAMBAR is added
+  as a TOC field over figure captions. The file asks Word to update fields on open, so
+  page numbers come from Word (refined in the plan: the template's lists are fields, not
+  text). The owner's comments are not carried over.
 - Comments become a to-do list in `docs/proposal_md/catatan_bab3.md`, marked done where
   `proposal.md` already resolves them. Comments 1 and 2 give DOIs
   (10.4103/JCPC.JCPC_4_20, 10.1016/j.cjco.2025.12.001) for the two object method figures:
