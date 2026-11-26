@@ -3,11 +3,24 @@
 ## Judul:
 Pengembangan Sistem Pendukung Keputusan Klinis Berbasis Interoperabilitas Data Rekam Medis Elektronik dan Pengukuran Kardiovaskular RADAR
 
+## Judul (Inggris):
+Development of a Clinical Decision Support System Based on the Interoperability of Electronic Medical Record Data and RADAR Cardiovascular Measurements
+
 ---
 
 ## ABSTRAK
 
 Pasien gagal jantung sering dirawat ulang setelah pulang, dan salah satu pemicunya adalah kongesti vena yang belum tertangani. Denyut vena jugularis mencerminkan tekanan atrium kanan, tetapi pemeriksaannya di sisi tempat tidur bergantung pada keterampilan pemeriksa, sedangkan pengukuran tekanan vena sentral memerlukan kateter. Kelompok riset tempat penelitian ini berada mengembangkan pengukuran nirkontak dengan radar gelombang kontinu 24 GHz pada leher. Hasil pengukuran itu belum bermakna bila dibaca sendiri, karena makna gelombang vena bergantung pada riwayat, obat, dan rekaman elektrokardiogram pasien yang tersimpan di sistem lain dengan format berbeda. Penelitian ini bertujuan membangun sistem pendukung keputusan klinis berbasis web yang menerima hasil pengukuran radar, rekaman elektrokardiogram dua belas sadapan, dan data rekam medis elektronik, lalu menampilkannya bagi dokter dalam satu tampilan dengan satu sumbu waktu. Seluruh data disimpan dalam standar Fast Healthcare Interoperability Resources versi R4 yang kompatibel dengan platform SATUSEHAT. Metode penelitian bersifat rekayasa sistem: spesifikasi rancangan ditulis lebih dulu, sistem dibangun bertahap dengan pengujian otomatis, lalu diuji berjenjang dari simulator, uji bangku dengan papan radar, sampai data subjek yang dipakai ulang dari cabang penelitian lain dalam kelompok yang sama. Penelitian ini tidak mengumpulkan subjek baru, dan data rekam medis yang dipakai bersifat sintetis. Purwarupa yang sudah berjalan mampu merekam sinyal mentah dari papan radar, menyimpannya tanpa kehilangan maupun duplikasi data, dan diakses melalui alamat publik. Hasil yang diharapkan adalah sistem yang memetakan ketiga sumber data ke satu format bersama dan menyajikannya secara utuh kepada dokter. Keluaran sistem berfungsi sebagai pendukung pertimbangan klinis, sementara keputusan tetap berada di tangan dokter.
+
+Kata kunci: FHIR, SATUSEHAT, interoperabilitas, sistem pendukung keputusan klinis, RADAR, jugular venous pulse, rekam medis elektronik.
+
+---
+
+## ABSTRACT
+
+Patients with heart failure are often readmitted after discharge, and one of the triggers is venous congestion that has not been resolved. The jugular venous pulse reflects right atrial pressure, but its bedside assessment depends on the examiner's skill, while measuring central venous pressure requires a catheter. The research group in which this study takes place is developing a contactless measurement on the neck using a 24 GHz continuous wave radar. The result of that measurement has little meaning when read on its own, because the meaning of the venous waveform depends on the patient's history, medication, and electrocardiogram recordings, which are stored in other systems with different formats. This study aims to build a web based clinical decision support system that receives radar measurement results, twelve lead electrocardiogram recordings, and electronic medical record data, and then displays them for the doctor in one view on one time axis. All data are stored in the Fast Healthcare Interoperability Resources standard, version R4, compatible with the SATUSEHAT platform. The research method is system engineering: design specifications are written first, the system is built incrementally with automated tests, and it is then tested in stages, from a simulator, through bench tests with the radar board, to subject data reused from other branches of research in the same group. This study does not collect new subjects, and the medical record data used are synthetic. The prototype that already runs can record raw signals from the radar board, store them without loss or duplication, and be accessed through a public address. The expected result is a system that maps the three data sources to one shared format and presents them in full to the doctor. The system output serves as support for clinical judgement, while the decision remains with the doctor.
+
+Keywords: FHIR, SATUSEHAT, interoperability, clinical decision support system, RADAR, jugular venous pulse, electronic medical record.
 
 ---
 
@@ -105,6 +118,10 @@ Dari ketiga kelompok itu terlihat celah yang menjadi pijakan penelitian ini. Stu
 ### 2.7 Rasional
 
 Telaah literatur memperlihatkan bahwa penilaian kongesti dan denyut vena jugularis berperan penting dalam tatalaksana gagal jantung. RADAR hadir sebagai cara baru untuk menangkap gelombang JVP secara noninvasif dan nirkontak, sehingga menjadi alternatif bagi kateterisasi yang invasif dan pemeriksaan visual yang bergantung pada pemeriksa. Bukti klinis menunjukkan bahwa hasil pengukuran JVP tidak dapat berdiri sendiri sebagai indikator tunggal, karena maknanya bergantung pada konteks pasien seperti penyakit penyerta, riwayat obat, dan perubahan berat badan yang tersimpan dalam RME. Instrumen RADAR dan RME beroperasi dengan format, skema metadata, dan ekosistem yang terpisah, sehingga diperlukan lapisan interoperabilitas berbasis HL7 FHIR untuk menyatukan keduanya dalam satu model data kanonik.
+
+Akar masalah yang melatarbelakangi penelitian ini dirangkum dalam diagram fishbone pada Gambar 2.2.
+
+![Gambar 2.2 Diagram fishbone](figures/fishbone.jpg)
 
 Karena itu penelitian ini difokuskan pada rekayasa sistem perangkat lunak pendukung keputusan klinis dan manajemen data terpadu, bukan pada pembuatan perangkat RADAR maupun penyusunan algoritma interpretasi baru, yang menjadi bagian cabang lain dalam kelompok riset. Rekaman EKG 12 sadapan dipakai sebagai titik acuan waktu agar fase mekanis denyut vena dapat dibaca terhadap siklus kelistrikan jantung. Sistem yang dibangun memadukan hasil pengukuran kardiovaskular dengan konteks RME untuk menyajikan tampilan menyeluruh bagi dokter. Luaran sistem diposisikan sebagai pendukung pertimbangan klinis bagi tenaga medis. Sistem ini bukan penentu diagnosis otomatis dan tidak menghasilkan skor risiko.
 
