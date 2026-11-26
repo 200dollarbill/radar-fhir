@@ -11,3 +11,10 @@ node_modules/
 .wrangler/
 hosting/public/
 firmware/radar_json/config.h
+
+# proposal resources kept local (group and course documents, Office lock files)
+docs/proposal_guide/Research Proposal.pdf
+docs/proposal_guide/proposal etik*.docx
+docs/proposal_guide/proposal_questions_template/template.docx
+docs/proposal_guide/proposal_questions_template/research_role_answers.docx
+.~lock.*#

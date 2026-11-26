@@ -116,6 +116,7 @@ Older specs, plans and handovers use the names from before 2026-11-19:
 
 ## Read next
 
+- `docs/handover/2026-11-24-handover.md`: where things stand and the next task (the proposal).
 - `docs/HOW-IT-WORKS.md`: how the whole program fits together, from radar to database.
 - `docs/accounts/README.md`: creating admin, doctor and patient accounts.
 - `docs/RUN-GUIDE.md`: the full walkthrough.
