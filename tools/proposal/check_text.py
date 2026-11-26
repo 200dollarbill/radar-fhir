@@ -67,6 +67,7 @@ def read(path):
     if path.endswith(".docx"):
         xml = zipfile.ZipFile(path).read("word/document.xml").decode()
         paras = re.findall(r"<w:p[ >].*?</w:p>", xml, re.S)
+        paras = [p for p in paras if 'w:pStyle w:val="Listing"' not in p]
         return "\n".join("".join(re.findall(r"<w:t[^>]*>([^<]*)", p)) for p in paras)
     with open(path, encoding="utf-8") as f:
         return f.read()
