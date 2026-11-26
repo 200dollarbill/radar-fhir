@@ -15,21 +15,22 @@ section or figure numbers are not listed.
 | Konsultasi dengan dokter mitra | 15 Oktober 2026, sekitar 100 subjek, lebih dari satu bulan | `docs/notul/konsultasi_15okt.txt` line 14 |
 | Radar CW | 24 GHz | `firmware/radar_json/README.md`, proposal etik |
 | Papan | ESP32 (AtomS3R) | `firmware/radar_json/README.md` |
-| ADC | 12 bit, 3,3 V | `firmware/radar_json/README.md` |
-| Laju sampel | 100 per detik; selang 10 ms | `firmware/radar_json/sampling.h`; `website/src/observation.js` (`period = 1000 / fs`) |
+| ADC | 12 bit, 3,3 V | `firmware/radar_json/radar_json.ino` (`ADC_REFERENCE_V`, `ADC_MAX_COUNTS` 4095) |
+| Laju sampel | 100 per detik; selang 10 ms | `firmware/radar_json/radar_json.ino` (`SAMPLE_RATE_HZ`); `website/src/observation.js` (`period = 1000 / fs`) |
 | Potongan | paling lama 10 detik (1000 sampel per kanal) | `website/src/chunker.js`, `docs/HOW-IT-WORKS.md` §2 |
 | Jumlah kanal per Observation | delapan (I, Q, 3 akselerometer, 3 giroskop) | `website/src/observation.js` (`COMPONENTS`) |
 | Token login | berlaku satu jam | `docs/HOW-IT-WORKS.md` §3 (`FHIR_JWT_TTL` 3600 s) |
 | Peran | empat | `fhir_server/authz.py`, `docs/HOW-IT-WORKS.md` §3 |
 | Metode tampilan | enam metode, hybrid, median 0,92 | `docs/eval/2026-11-18-radar-display-processing.md` |
+| Pembatasan login | membatasi sebagian percobaan cepat (5 dari 100 percobaan ditolak, sebagian) | hosting spec live check 2 (Partial) |
 | Uji otomatis 26 November 2026 | 236 server, 179 web, 23 hosting (semua lolos) | fresh `make test` on 2026-11-26 (also 34 scraper tests, linter 0 problems) |
 | Papan diam | sekitar 1,53 V, sebaran sekitar 1 mV | `CLAUDE.md` Status, 2026-11-18 handover §5 |
-| Saat ada gerakan | sebaran 90 sampai 170 mV | `CLAUDE.md` Status, recordings 2026-11-18 |
-| Uji gangguan | terunggah 16 sampai 17 detik setelah server kembali, tanpa duplikasi | end of `docs/design/specs/2026-11-19-tidy-up-and-cloudflare-hosting-design.md` |
+| Rekaman 18 November 2026 | sebaran 90 sampai 170 mV, pola I/Q menandakan respons terhadap gerakan | `CLAUDE.md` Status, recordings 2026-11-18 |
+| Uji gangguan | terunggah 16 sampai 17 detik setelah server (16,0 s) atau tunnel (17,1 s) kembali, tanpa duplikasi | end of `docs/design/specs/2026-11-19-tidy-up-and-cloudflare-hosting-design.md` |
 | Worker | tidak lebih dari 3 ms per permintaan | same hosting spec, live checks |
 | Kriteria kelengkapan sampel | 100%, duplikat nol | design target from 1.4 (*seluruh sampel yang dikirim tersimpan utuh tanpa duplikasi*) |
 | Kepmenkes | HK.01.07/Menkes/1423/2022 | reference [21] |
-| Listing 3.1 | `2026-11-18T07:30:10+00:00`, `1.531 1.532 1.530`, period 10 | illustrative values in the shape of `website/src/observation.js`; the date and voltages are examples near the idle reading, not a stored recording |
+| Listing 3.1 | `2026-11-18T07:30:10+00:00`, `1.531 1.532 1.530`, period 10, organization `100000001` | illustrative values in the shape of `website/src/observation.js`; the date and voltages are examples near the idle reading, not a stored recording |
 
 ## Placeholder
 

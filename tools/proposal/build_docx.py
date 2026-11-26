@@ -77,17 +77,17 @@ def text(p):
     return "".join(t.text or "" for t in p.iter(W + "t"))
 
 
-def run(t, bold=False, italic=False, rpr=None):
+def run(t, bold=False, italic=False, rpr=None, unbold=False):
+    """A text run. rpr (template formatting) is kept as is unless bold or unbold is asked."""
     r = el("r")
     rp = copy.deepcopy(rpr) if rpr is not None else el("rPr")
-    for tag in ("b", "bCs", "i", "iCs"):
-        for x in rp.findall(W + tag):
-            rp.remove(x)
-    if bold:
-        rp.append(el("b", {"val": "1"}))
-        rp.append(el("bCs", {"val": "1"}))
-    elif rpr is not None:
-        rp.append(el("b", {"val": "0"}))
+    if bold or unbold:
+        for tag in ("b", "bCs"):
+            for x in rp.findall(W + tag):
+                rp.remove(x)
+        val = "1" if bold else "0"
+        rp.append(el("b", {"val": val}))
+        rp.append(el("bCs", {"val": val}))
     if italic:
         rp.append(el("i", {"val": "1"}))
     if len(rp):
@@ -132,7 +132,7 @@ def para(runs_, style=None, center=False, no_indent=False, page_break=False, kee
 def caption(t, style):
     m = re.match(r"((?:Gambar|Tabel|Listing) [\d.]+)(.*)", t)
     head, rest = (m.group(1), m.group(2)) if m else (t, "")
-    return para([run(head, bold=True), run(rest, rpr=el("rPr"))], style=style, center=True,
+    return para([run(head, bold=True), run(rest, unbold=True)], style=style, center=True,
                 keep_next=style == "Heading6")
 
 

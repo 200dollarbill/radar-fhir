@@ -193,22 +193,24 @@ Tabel 3.1 Pemetaan data ke resource FHIR
 
 | Data | Resource | Elemen utama | Sistem kode dan kode |
 |---|---|---|---|
-| Identitas pasien uji | Patient | identifier, name, gender, birthDate | NIK dan nomor IHS dengan sistem identifier SATUSEHAT |
+| Identitas pasien uji | Patient | identifier, name, gender, birthDate | NIK dengan sistem identifier SATUSEHAT (pasien contoh pada basis data awal juga membawa nomor IHS) |
 | Dokter | Practitioner | identifier, name | NIK dengan sistem identifier SATUSEHAT |
 | Fasilitas dan ruang | Organization, Location | identifier, name, managingOrganization | sistem identifier organisasi SATUSEHAT |
 | Sesi pengukuran | Encounter | status, class, subject, participant, location, period | class AMB (ambulatory) dari HL7 v3 ActCode |
 | Papan radar | Device | identifier, serialNumber, deviceName | nomor chip papan dengan code system lokal |
-| Sinyal mentah satu potongan | Observation | code, subject, encounter, device, effectiveDateTime, component | code system lokal, kode raw capture; satuan UCUM |
+| Sinyal mentah satu potongan | Observation | identifier, code, subject, encounter, device, effectiveDateTime, note, component | code system lokal, kode raw capture; satuan UCUM |
 | Delapan kanal sinyal | Observation.component | valueSampledData (origin, period, dimensions, data) | kode lokal per kanal: I, Q, tiga sumbu akselerometer, tiga sumbu giroskop |
 | Rekaman EKG 12 sadapan (direncanakan) | Observation, DiagnosticReport, Device | mengikuti panduan implementasi EKG [20] | LOINC dan SNOMED CT sesuai panduan [20] |
 | Data RME sintetis (direncanakan) | Condition, MedicationStatement, Observation | mengikuti variabel RME [21] | ICD 10, LOINC, dan SNOMED CT |
 
-Sinyal mentah disimpan sebagai satu Observation per potongan. Setiap kanal menjadi satu komponen dengan SampledData, yaitu deret angka yang disertai titik nol (origin), selang antarsampel (period), dan satuannya. Pada laju 100 sampel per detik, selang antarsampel adalah 10 ms. Listing 3.1 memperlihatkan bentuk resource tersebut dengan isi data yang dipersingkat. Catatan mutu potongan, yaitu jumlah sampel yang hilang dan baris yang ditolak, disimpan pada elemen note agar celah data tetap tercatat. Karena kode standar untuk sinyal I/Q radar tidak ditemukan, sistem memakai code system lokal, dan hal ini dicatat sebagai keterbatasan.
+Sinyal mentah disimpan sebagai satu Observation per potongan. Setiap kanal menjadi satu komponen dengan SampledData, yaitu deret angka yang disertai titik nol (origin), selang antarsampel (period), dan satuannya. Pada laju 100 sampel per detik, selang antarsampel adalah 10 ms. Listing 3.1 memperlihatkan bentuk resource tersebut dengan isi data yang dipersingkat, tanpa elemen note dan tanpa tujuh komponen lainnya. Identifier setiap potongan bersifat unik, sehingga server dapat memakai pembuatan bersyarat untuk menolak potongan yang terkirim dua kali. Catatan mutu potongan, yaitu jumlah sampel yang hilang dan baris yang ditolak, disimpan pada elemen note agar celah data tetap tercatat. Karena kode standar untuk sinyal I/Q radar tidak ditemukan, sistem memakai code system lokal, dan hal ini dicatat sebagai keterbatasan.
 
 ```json
 {
   "resourceType": "Observation",
   "status": "final",
+  "identifier": [{"system": "http://sys-ids.kemkes.go.id/organization/100000001",
+                  "value": "..."}],
   "code": {"coding": [{"system": "urn:prata:radar-signal",
                        "code": "raw-capture",
                        "display": "Raw radar I/Q capture"}]},
@@ -242,7 +244,7 @@ Tampilan terpadu bagi dokter direncanakan memuat konteks RME pasien, gelombang r
 
 Keamanan dirancang berlapis. Lapisan pertama adalah akun. Akun dibuat hanya dari laptop peneliti, tidak ada pendaftaran mandiri, dan pengelolaan akun ditolak bila diakses dari internet, baik oleh Worker maupun oleh server. Kata sandi disimpan sebagai hash, dan pengguna yang masuk menerima token bertanda tangan yang berlaku satu jam. Lapisan kedua adalah peran. Admin mendaftarkan papan dan pasien uji serta dapat membuka dan menutup sesi mana pun. Dokter hanya dapat membuka sesi bagi pasien yang ia tangani. Papan hanya dapat menulis hasil pengukuran ke sesinya sendiri yang sedang terbuka. Pasien hanya dapat membaca rekamannya sendiri.
 
-Lapisan ketiga adalah identitas papan. Identitas papan berasal dari nomor unik chip ESP32 dan kunci acak yang dibuat papan saat pertama kali menyala, dan server hanya menyimpan hash kunci tersebut. Lapisan keempat adalah jalur publik. Cloudflare Worker hanya meneruskan permintaan ke laptop melalui tunnel, menandai permintaan yang datang dari internet, dan tidak menyimpan data. Keterbatasan yang diketahui dicatat terbuka. Papan saat ini mengirim kuncinya kepada siapa pun yang memintanya melalui port, dengan perbaikan yang direncanakan berupa mekanisme tantangan dan jawaban. Pembatasan laju login menghentikan percobaan cepat, tetapi belum menghentikan tebakan yang lambat.
+Lapisan ketiga adalah identitas papan. Identitas papan berasal dari nomor unik chip ESP32 dan kunci acak yang dibuat papan saat pertama kali menyala, dan server hanya menyimpan hash kunci tersebut. Lapisan keempat adalah jalur publik. Cloudflare Worker hanya meneruskan permintaan ke laptop melalui tunnel, menandai permintaan yang datang dari internet, dan tidak menyimpan data. Keterbatasan yang diketahui dicatat terbuka. Papan saat ini mengirim kuncinya kepada siapa pun yang memintanya melalui port, dengan perbaikan yang direncanakan berupa mekanisme tantangan dan jawaban. Pembatasan laju login membatasi sebagian percobaan cepat, tetapi belum menghentikan tebakan yang lambat.
 
 ### 3.9 Perancangan Pengujian
 
@@ -280,7 +282,7 @@ Pengambilan data subjek dilakukan oleh cabang A sampai C dan baru dimulai setela
 
 ### 3.11 Progres Penelitian
 
-Per 26 November 2026, purwarupa sistem sudah berjalan dari papan radar sampai basis data dan dapat diakses melalui alamat publik. Pengujian otomatis yang dijalankan pada tanggal tersebut lolos seluruhnya, yaitu 236 uji server, 179 uji halaman web, dan 23 uji lapisan hosting. Status setiap komponen dirangkum pada Tabel 3.3. Pada uji bangku, kedua kanal papan diam berada di sekitar 1,53 V dengan sebaran sekitar 1 mV, dan sebaran naik menjadi 90 sampai 170 mV ketika ada gerakan di depan radar. Rekaman ini menunjukkan bahwa radar merespons gerakan, tetapi belum ditinjau sebagai sinyal fisiologis. Pada uji gangguan, seluruh potongan yang tertahan di peramban terunggah 16 sampai 17 detik setelah server kembali menyala tanpa duplikasi, dan waktu proses Worker tidak lebih dari 3 ms per permintaan. Nilai detak jantung yang dikirim firmware masih berupa nilai pengganti, bukan hasil pengukuran radar.
+Per 26 November 2026, purwarupa sistem sudah berjalan dari papan radar sampai basis data, dan halamannya dapat diakses melalui alamat publik. Papan nyata baru diuji secara lokal dan belum diuji lewat alamat publik. Pengujian otomatis yang dijalankan pada tanggal tersebut lolos seluruhnya, yaitu 236 uji server, 179 uji halaman web, dan 23 uji lapisan hosting. Status setiap komponen dirangkum pada Tabel 3.3. Pada uji bangku, kedua kanal papan diam berada di sekitar 1,53 V dengan sebaran sekitar 1 mV, sedangkan rekaman 18 November 2026 menunjukkan sebaran 90 sampai 170 mV dan pola I/Q yang menandakan radar merespons gerakan. Rekaman ini belum ditinjau sebagai sinyal fisiologis. Pada uji gangguan, seluruh potongan yang tertahan di peramban terunggah 16 sampai 17 detik setelah server atau tunnel kembali menyala tanpa duplikasi, dan waktu proses Worker tidak lebih dari 3 ms per permintaan. Nilai detak jantung yang dikirim firmware masih berupa nilai pengganti, bukan hasil pengukuran radar.
 
 Tabel 3.3 Status komponen sistem
 

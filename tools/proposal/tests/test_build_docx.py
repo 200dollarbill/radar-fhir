@@ -123,3 +123,24 @@ def test_checker_clean(built):
     text = read(str(built["out"]))
     problems = check(text[text.index("BAB I"):])
     assert [p for p in problems if p.split("banned: ")[-1] not in allowed] == []
+
+
+def _runs_of(b, startswith):
+    for p in doc_root(b).iter(W + "p"):
+        if ptext(p).startswith(startswith):
+            return p.findall(W + "r")
+    raise AssertionError(startswith)
+
+
+def _on(r, tag):
+    x = r.find(f"{W}rPr/{W}{tag}")
+    return x is not None and x.get(W + "val") in (None, "1", "true")
+
+
+def test_front_matter_formatting_kept(built):
+    # cover and pengesahan titles are bold in the template; the English abstract is italic
+    assert all(_on(r, "b") for r in _runs_of(built, "Development of a Clinical"))
+    titles = [p for p in doc_root(built).iter(W + "p")
+              if ptext(p).startswith("Pengembangan Sistem Pendukung")]
+    assert sum(all(_on(r, "b") for r in p.findall(W + "r")) for p in titles) >= 2
+    assert all(_on(r, "i") for r in _runs_of(built, "Patients with heart failure"))

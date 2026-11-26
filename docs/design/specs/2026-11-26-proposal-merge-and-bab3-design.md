@@ -116,6 +116,8 @@ and footers.
    to [41]). The checker currently skips inline code but not fenced code blocks, so it
    gains a test and a rule to skip fenced blocks (the JSON listing holds dates with
    hyphens). In the docx the listing is skipped by its paragraph style.
+   Refined in execution: on the docx the check starts at BAB I (the ITS cover carries the
+   course code `EB184702`) and honours the `check:ok` allowances written in `proposal.md`.
 3. Every number in Bab III appears in the claims table of `catatan_bab3.md` with its source.
 4. Fidelity review: at least five numbers and three built versus planned statements
    re-derived from repo files (fresh Claude Opus 5.5 subagent if the owner agrees,
